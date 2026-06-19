@@ -85,7 +85,8 @@
         .char-card .skill { font-size:13px; color:#eee; line-height:1.55; }
         .char-card.wei { border-color:#5b9bf6; }
         .char-card.meng { border-color:#f6a93b; }
-        .char-card.fusion { border-color:#c07bf0; box-shadow:0 0 16px rgba(192,123,240,.5); background:linear-gradient(160deg,rgba(91,155,246,.18),rgba(246,169,59,.18)); }
+        .char-card.fusion { border-color:#c07bf0; box-shadow:0 0 16px rgba(192,123,240,.5); background:linear-gradient(160deg,rgba(91,155,246,.18),rgba(246,169,59,.18)); position:relative; }
+        .char-card .unlock-badge { position:absolute; top:-10px; right:-8px; background:#ffd24a; color:#5a2a00; font-size:11px; font-weight:bold; padding:3px 7px; border-radius:10px; border:2px solid #fff; box-shadow:0 2px 4px rgba(0,0,0,.4); transform:rotate(8deg); }
 
         .menu-row { display:flex; gap:12px; margin-top:6px; flex-wrap:wrap; justify-content:center; }
 
@@ -103,6 +104,10 @@
             font-family:'Press Start 2P',monospace; cursor:pointer; box-shadow:2px 2px 0 #000;
         }
         #musicToggle.muted { opacity:.5; text-decoration:line-through; }
+        #musicToggle.bgm-side { top:50%; bottom:auto; right:auto; left:8px; transform:translateY(-50%); padding:6px 9px; font-size:11px; }   /* 雙人模式移到左側中間，避開上方血量與下方虛擬鍵 */
+        #pauseBtn { position:absolute; top:10px; left:50%; transform:translateX(-50%); z-index:40; background:rgba(0,0,0,.5);
+            border:2px solid #fff; color:#fff; width:40px; height:40px; border-radius:9px; font-size:14px;
+            cursor:pointer; box-shadow:2px 2px 0 #000; -webkit-tap-highlight-color:transparent; }
 
         /* ---------- HUD ---------- */
         #hud { position:absolute; top:14px; left:14px; right:96px; z-index:15; pointer-events:none; font-family:'DotGothic16',sans-serif; }
@@ -200,17 +205,21 @@
 
         /* 東京夜景主選單 (競速解鎖) */
         #menuScreen.night { background:linear-gradient(135deg,#05071a,#0e1c46,#2a1450,#0b0d24); background-size:300% 300%; }
+        #nightBg { position:absolute; inset:0; overflow:hidden; pointer-events:none; z-index:0; display:none; }
+        #menuScreen.night #nightBg { display:block; }
+        #nightBg .nlight { position:absolute; width:4px; height:4px; border-radius:50%; animation:pulse infinite; }
+        #nightBg .sakura { opacity:.6; }
 
         /* 單機跑酷手機觸控鍵 (直握優化) */
-        #runTouch { position:absolute; left:0; right:0; bottom:0; height:38vh; max-height:280px; z-index:12; pointer-events:none; display:flex; justify-content:space-between; align-items:flex-end; padding:0 20px 24px; }
+        #runTouch { position:absolute; left:0; right:0; bottom:0; height:96px; z-index:12; pointer-events:none; display:flex; justify-content:space-between; align-items:flex-end; padding:0 18px 18px; }
         #runTouch .rbtn {
-            pointer-events:auto; width:38vw; max-width:170px; height:24vh; max-height:170px; border-radius:24px;
+            pointer-events:auto; width:66px; height:66px; border-radius:50%;
             display:flex; align-items:center; justify-content:center; font-family:'DotGothic16',sans-serif;
-            font-size:26px; color:#fff; border:3px solid rgba(255,255,255,.75); box-shadow:0 6px 0 rgba(0,0,0,.35);
-            -webkit-tap-highlight-color:transparent; touch-action:none; user-select:none;
+            font-size:15px; color:#fff; border:2px solid rgba(255,255,255,.6); box-shadow:0 4px 0 rgba(0,0,0,.3);
+            -webkit-tap-highlight-color:transparent; touch-action:none; user-select:none; opacity:.62;
         }
-        #runTouch .rbtn.jump { background:rgba(124,58,237,.42); }
-        #runTouch .rbtn.slide { background:rgba(43,140,255,.40); }
+        #runTouch .rbtn.jump { background:rgba(124,58,237,.5); }
+        #runTouch .rbtn.slide { background:rgba(43,140,255,.48); }
         #runTouch .rbtn:active { transform:translateY(4px); box-shadow:0 2px 0 rgba(0,0,0,.35); filter:brightness(1.25); }
 
         /* 結果/暫停 */
@@ -244,6 +253,7 @@
 
     <!-- 主選單 -->
     <div id="menuScreen" class="ui-layer">
+        <div id="nightBg"></div>
         <div class="floaties" id="floaties"></div>
         <div class="menu-inner">
             <div class="planet"></div>
@@ -265,6 +275,7 @@
                     <div class="skill">跳躍加強<br>（跳得更高）</div>
                 </div>
                 <div class="char-card fusion hidden" id="fusionCard" onclick="startGame('fusion')">
+                    <div class="unlock-badge">★ 已解鎖</div>
                     <canvas class="pre" id="preFusion" width="56" height="56"></canvas>
                     <div class="role" style="color:#d9a6ff">合體崴孟</div>
                     <div class="skill">能力兼具<br>（護盾＋高跳）</div>
@@ -280,6 +291,11 @@
                 <button class="btn btn-small btn-ghost" onclick="openGallery()">回憶碎片</button>
                 <button class="btn btn-small btn-ghost" id="freeRunBtn" onclick="startFreeRun()" disabled>自由漫跑（未解鎖）</button>
             </div>
+            <div class="menu-row hidden" id="clearModesRow">
+                <button class="btn btn-small btn-ghost" onclick="openLevelSelect()">關卡模式（選章節）</button>
+                <button class="btn btn-small btn-ghost" onclick="startHardcore()">一命通關（無存檔點）</button>
+                <button class="btn btn-small btn-ghost" onclick="startEndless()">♾️ 無盡模式（愈來愈快）</button>
+            </div>
 
             <div class="instructions">
                 <b>操作</b><br>
@@ -292,12 +308,26 @@
         </div>
     </div>
 
+    <!-- 暫停 -->
+    <button id="pauseBtn" class="hidden" onclick="pauseGame()">❚❚</button>
+    <div id="pauseScreen" class="ui-layer hidden" style="background:rgba(10,6,22,.9);">
+        <h1 style="color:#ffd24a;">暫停中</h1>
+        <p class="subtitle" id="pauseInfo" style="color:#fff;"></p>
+        <div class="menu-row">
+            <button class="btn" onclick="resumeGame()">繼續遊戲 ▶</button>
+        </div>
+        <div class="menu-row">
+            <button class="btn btn-small btn-ghost" onclick="continueGame()">從紀錄點重來</button>
+            <button class="btn btn-small btn-ghost" onclick="pauseToMenu()">回主選單</button>
+        </div>
+    </div>
+
     <!-- 遊戲結束 -->
     <div id="gameOverScreen" class="ui-layer hidden" style="background:rgba(16,8,26,.92);">
         <h1 style="color:#ff6b81;">GAME OVER</h1>
         <p id="finalScore" class="subtitle" style="font-size:22px; color:#fff;">里程: 0m<br>分數: 0</p>
         <div class="menu-row">
-            <button class="btn" onclick="continueGame()">從紀錄點重來</button>
+            <button class="btn" id="goContinueBtn" onclick="continueGame()">從紀錄點重來</button>
             <button class="btn btn-ghost" onclick="showMenu()">回主選單</button>
         </div>
     </div>
@@ -305,10 +335,11 @@
     <!-- 雙人合作 選關 -->
     <div id="coopSelect" class="ui-layer hidden">
         <h1 style="font-size:24px;">雙人合作闖關</h1>
-        <p class="mode-tag">崴寶(P1) <b>WASD移動・W跳・S滑・E護盾傳遞</b>　｜　孟寶(P2) <b>方向鍵・↑跳(可二段)・↓滑・Shift助攻</b><br>兩人一起抵達終點即過關。三顆愛心、可互相救援、合體衝刺(同時按技能)。</p>
+        <p class="mode-tag" id="coopCtrlTag"></p>
         <div class="lvl-grid" id="coopGrid"></div>
         <div id="coopUnlock" class="mode-tag"></div>
         <div class="menu-row">
+            <button class="btn btn-small btn-ghost" onclick="openKeySetup()">操作設定 / 自訂按鍵</button>
             <button class="btn btn-small btn-ghost hidden" id="coopWeddingBtn" onclick="plReplayWedding()">重看婚禮結局</button>
             <button class="btn btn-small" onclick="showMenu()">返回</button>
         </div>
@@ -318,6 +349,7 @@
     <div id="raceSelect" class="ui-layer hidden">
         <h1 style="font-size:24px;">雙人競速對決</h1>
         <p class="mode-tag">分割畫面同場較勁，先抵達終點者勝。碰撞會彈開、踩頭使對方暈眩，沿途撿道具。</p>
+        <p class="mode-tag" id="raceCtrlTag"></p>
         <div class="mode-tag">選擇賽道長度：</div>
         <div class="race-opts" id="raceOpts">
             <button class="btn btn-small" data-d="3000">3000m</button>
@@ -327,7 +359,29 @@
         <div id="raceUnlock" class="mode-tag"></div>
         <div class="menu-row">
             <button class="btn" onclick="startRace()">開始競速</button>
+            <button class="btn btn-small btn-ghost" onclick="openKeySetup()">操作設定</button>
             <button class="btn btn-small" onclick="showMenu()">返回</button>
+        </div>
+    </div>
+
+    <!-- 關卡模式（單機選章節）-->
+    <div id="levelSelect" class="ui-layer hidden">
+        <h1 style="font-size:24px;">關卡模式</h1>
+        <p class="mode-tag">通關後解鎖：自由選擇任一章節開始跑酷（保留紀錄點）。</p>
+        <div class="lvl-grid" id="levelGrid"></div>
+        <div class="menu-row">
+            <button class="btn btn-small" onclick="showMenu()">返回</button>
+        </div>
+    </div>
+
+    <!-- 自訂按鍵 -->
+    <div id="keySetup" class="ui-layer hidden">
+        <h1 style="font-size:24px;">操作設定 / 自訂按鍵</h1>
+        <p class="mode-tag" id="keySetupHint">點任一按鍵格，再按下你想設定的鍵。技能：崴寶 = 護盾傳遞，孟寶 = 助攻。</p>
+        <div id="keyGrid" style="display:flex; gap:28px; justify-content:center; flex-wrap:wrap; margin:6px 0 14px;"></div>
+        <div class="menu-row">
+            <button class="btn btn-small btn-ghost" onclick="resetKeys()">重設為預設</button>
+            <button class="btn btn-small" onclick="closeKeySetup()">完成</button>
         </div>
     </div>
 
@@ -596,11 +650,12 @@
           progressFill=document.getElementById('progressFill'), fragHud=document.getElementById('fragHud'),
           qteSequenceDisplay=document.getElementById('qte-sequence'), chapterBanner=document.getElementById('chapterBanner');
 
-    let GAME_SPEED_BASE=9.8, gameSpeed=GAME_SPEED_BASE, gravity=0.92;
-    let gameState='menu', freeRun=false;
+    let GAME_SPEED_BASE=isMobile?7.8:9.8, gameSpeed=GAME_SPEED_BASE, gravity=0.92;
+    const SPEED_CAP=isMobile?12.5:16.5, SPACE_MULT=isMobile?1.4:1;   // 手機：更慢上限 + 更寬間距，補足反應時間
+    let gameState='menu', freeRun=false, hardcore=false, endless=false;
     let score=0, distance=0, frames=0, chapterIndex=0, runStartTime=0;
     let bossDone=false, codeDone=false, tongueDone=false, endingTriggered=false;
-    let screenW, screenH, groundY, PIXEL_SCALE=4;
+    let screenW, screenH, groundY, PIXEL_SCALE=isMobile?3:4;
     function curChapter(){ return CHAPTERS[chapterIndex]; }
 
     function resizeCanvas() {
@@ -865,7 +920,7 @@
     function enterChapter(idx, popCard) {
         chapterIndex=idx; const ch=curChapter();
         chapterNameEl.textContent=`第${idx+1}章 ${ch.name}`; setBgmSlice(idx); showChapterBanner(ch);
-        if (!freeRun && idx>save.checkpoint) { save.checkpoint=idx; localStorage.setItem('wm_checkpoint', idx); }
+        if (!freeRun && !hardcore && idx>save.checkpoint) { save.checkpoint=idx; localStorage.setItem('wm_checkpoint', idx); }
         const fid=idx+1; if (!save.fragments.has(fid)) { save.fragments.add(fid); saveFragments(); }
         updateFragHud(); if (popCard) showFragment(fid);
     }
@@ -946,6 +1001,12 @@
     function qteFail(){ qteActive=false; qteScreen.classList.add('hidden'); createFloatingText('再試一次…',screenW/2-50,screenH/2,'#ccc'); resumePlay(); }
     function resumePlay(){ gameState='playing'; requestAnimationFrame(gameLoop); }
     function checkCollision(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
+    // 較寬容的碰撞箱：鳥型只保留下半部 (跳得夠高即可安全通過)，地面障礙四周內縮
+    function collBox(o){
+        if (o.kind==='bird'){ const t=o.h*0.55; return {x:o.x+o.w*0.12, y:o.y+t, w:o.w*0.76, h:o.h-t}; }
+        return {x:o.x+o.w*0.16, y:o.y+o.h*0.12, w:o.w*0.68, h:o.h*0.88};
+    }
+    function playerBox(p){ return {x:p.x+p.w*0.22, y:p.y+p.h*0.10, w:p.w*0.56, h:p.h*0.88}; }
 
     // ---------------- 障礙產生 (變化隊形 + 不規則間距，皆保證可躲) ----------------
     let nextBreather = 0, lastAirDist = -9999, lastWasAir = false;
@@ -968,7 +1029,7 @@
         items.forEach(it=> rightmost=Math.max(rightmost,it.x+it.w));      // 連愛心也算進間距，避免擠在一起
         if (obstacles.length===0 || (screenW-rightmost)>=nextBreather) {
             spawnFormation();
-            nextBreather = 430 + gameSpeed*32 + Math.random()*210;        // 速度越快間距越大，保證反應時間 (快但公平)
+            nextBreather = (430 + gameSpeed*32 + Math.random()*210) * SPACE_MULT;   // 速度越快間距越大，保證反應時間 (快但公平)；手機加寬
             // 偶爾在這段空檔正中央放一顆漂浮愛心：遠離障礙、跑步即可吃到，不會一落地就誤踩
             if (distance>150 && Math.random()<0.4) {
                 const it=new Item();
@@ -985,7 +1046,7 @@
         initAudio(); freeRun=!!free; player=new Player(type);
         obstacles=[]; items=[]; particles=[]; nextBreather=0; lastAirDist=-9999; lastWasAir=false;
         score=0; distance=startCh*1000; frames=0;
-        gameSpeed=Math.min(16.5, GAME_SPEED_BASE + startCh*0.5); chapterIndex=startCh;
+        gameSpeed=Math.min(SPEED_CAP, GAME_SPEED_BASE + startCh*0.5); chapterIndex=startCh;
         bossDone=false; codeDone=false; tongueDone=false; endingTriggered=false; runStartTime=performance.now();
         initBackground(); scoreDisplay.innerText='0'; updateFragHud();
         progressFill.style.width=Math.min(100, distance/10000*100)+'%';
@@ -995,12 +1056,20 @@
         chapterNameEl.textContent=`第${startCh+1}章 ${ch0.name}`; setBgmSlice(startCh); startBGM(); gameState='playing';
         const fid=startCh+1; if (!save.fragments.has(fid)) { save.fragments.add(fid); saveFragments(); updateFragHud(); }
         showChapterBanner(ch0); setTimeout(()=>swipeHint.classList.add('hidden'),3000);
+        document.getElementById('musicToggle').classList.remove('bgm-side');
+        document.getElementById('pauseScreen').classList.add('hidden'); document.getElementById('pauseBtn').classList.remove('hidden');
         if (isMobile) { if(player) player.slideHeld=false; document.getElementById('runTouch').classList.remove('hidden'); }
         requestAnimationFrame(gameLoop);
     }
     function gameOver() {
-        gameState='gameover'; sfx.hit(); stopBGM(); hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); recordStats();
-        document.getElementById('finalScore').innerHTML=`第${chapterIndex+1}章 ${curChapter().name}<br>里程: ${Math.floor(distance)}m　分數: ${score}<br>回憶: ${save.fragments.size}/10`;
+        gameState='gameover'; sfx.hit(); stopBGM(); hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); recordStats();
+        const tag = endless?'♾️ 無盡模式<br>':(hardcore?'🔥 一命挑戰<br>':'');
+        const where = endless?`已跑 ${Math.floor(distance/1000)+1} 關`:`第${chapterIndex+1}章 ${curChapter().name}`;
+        document.getElementById('finalScore').innerHTML=`${tag}${where}<br>里程: ${Math.floor(distance)}m　分數: ${score}<br>最佳里程: ${Math.max(save.bestDist,Math.floor(distance))}m`;
+        const gc=document.getElementById('goContinueBtn');
+        if (endless) { gc.textContent='再挑戰無盡 ♾️'; gc.onclick=startEndless; }
+        else if (hardcore) { gc.textContent='重新挑戰（一命）'; gc.onclick=startHardcore; }
+        else { gc.textContent='從紀錄點重來'; gc.onclick=continueGame; }
         gameOverScreen.classList.remove('hidden');
     }
     function recordStats() {
@@ -1010,8 +1079,10 @@
     function showMenu() {
         gameOverScreen.classList.add('hidden'); galleryScreen.classList.add('hidden');
         endingScreen.classList.add('hidden'); fragmentScreen.classList.add('hidden');
-        ['coopSelect','raceSelect','plResult','plTouch','weddingScreen','runTouch'].forEach(id=>document.getElementById(id).classList.add('hidden'));
+        ['coopSelect','raceSelect','plResult','plTouch','weddingScreen','runTouch','levelSelect','keySetup','pauseScreen'].forEach(id=>document.getElementById(id).classList.add('hidden'));
         menuScreen.classList.remove('hidden'); hud.classList.add('hidden'); stopBGM();
+        document.getElementById('musicToggle').classList.remove('bgm-side');
+        document.getElementById('pauseScreen').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden');
         menuScreen.classList.toggle('night', plGetRaceWins()>=5);
         ctx.clearRect(0,0,canvas.width,canvas.height); gameState='menu'; refreshMenu();
     }
@@ -1019,17 +1090,28 @@
     function gameLoop() {
         if (gameState!=='playing') return;
         ctx.clearRect(0,0,canvas.width,canvas.height); drawBackground();
-        frames++; distance+=gameSpeed*0.024; if (frames%380===0 && gameSpeed<16.5) gameSpeed+=0.45;
+        frames++; distance+=gameSpeed*0.024;
+        if (!endless && frames%(isMobile?460:380)===0 && gameSpeed<SPEED_CAP) gameSpeed+=isMobile?0.35:0.45;
 
-        let targetCh=Math.min(9,Math.floor(distance/1000));
-        if (!freeRun && targetCh>chapterIndex) { enterChapter(targetCh,true); progressFill.style.width=Math.min(100,distance/10000*100)+'%'; return; }
-        if (freeRun && targetCh!==chapterIndex) { chapterIndex=targetCh; setBgmSlice(targetCh); chapterNameEl.textContent=`${curChapter().name}`; }
-
-        if (!freeRun) {
-            if (!codeDone && distance>=3500 && chapterIndex===3) { triggerCode(); return; }
-            if (!tongueDone && distance>=6500 && chapterIndex===6) { triggerTongue(); return; }
-            if (!bossDone && distance>=9500 && chapterIndex===9) { triggerBoss(); return; }
-            if (!endingTriggered && distance>=10000 && save.fragments.size>=10) { triggerEnding(); return; }
+        if (endless) {
+            // 無盡：章節無限循環，每過一關直接提速 (真的愈來愈快)
+            const loopCh=Math.floor(distance/1000), themeCh=loopCh%10;
+            if (themeCh!==chapterIndex) {
+                chapterIndex=themeCh; setBgmSlice(themeCh);
+                gameSpeed=Math.min(28, GAME_SPEED_BASE + loopCh*(isMobile?0.7:1.0));
+                chapterNameEl.textContent=`無盡 ${loopCh+1} 關　${curChapter().name}`;
+                sfx.chord(); createFloatingText('⚡ 加速！第'+(loopCh+1)+'關', player.x, player.y-40, '#ffd24a');
+            }
+        } else {
+            let targetCh=Math.min(9,Math.floor(distance/1000));
+            if (!freeRun && targetCh>chapterIndex) { enterChapter(targetCh,true); progressFill.style.width=Math.min(100,distance/10000*100)+'%'; return; }
+            if (freeRun && targetCh!==chapterIndex) { chapterIndex=targetCh; setBgmSlice(targetCh); chapterNameEl.textContent=`${curChapter().name}`; }
+            if (!freeRun) {
+                if (!codeDone && distance>=3500 && chapterIndex===3) { triggerCode(); return; }
+                if (!tongueDone && distance>=6500 && chapterIndex===6) { triggerTongue(); return; }
+                if (!bossDone && distance>=9500 && chapterIndex===9) { triggerBoss(); return; }
+                if (!endingTriggered && distance>=10000 && save.fragments.size>=10) { triggerEnding(); return; }
+            }
         }
 
         maybeSpawnObstacle();
@@ -1044,7 +1126,7 @@
         }
         for (let i=obstacles.length-1;i>=0;i--) {
             let o=obstacles[i]; o.update(); o.draw();
-            if (checkCollision(player,o)) {
+            if (checkCollision(playerBox(player),collBox(o))) {
                 if (player.invincibleTime>0) { sfx.hit(); createParticleExplosion(o.x,o.y,curChapter().colors.accent,15); obstacles.splice(i,1); score+=50; createFloatingText('撞飛！',o.x,o.y,'#fff'); }
                 else if (player.shield>0) { sfx.shieldBreak(); createParticleExplosion(player.x,player.y,'#5b9bf6',20); player.shield--; player.invincibleTime=60; obstacles.splice(i,1); createFloatingText('AI護盾破裂！',player.x,player.y-30,'#5b9bf6'); }
                 else { gameOver(); return; }
@@ -1058,12 +1140,32 @@
 
         scoreDisplay.innerText=`${score}`;
         const d=document.getElementById('distDisplay'); if (d) d.innerText=`${Math.floor(distance)}m`;
-        progressFill.style.width=Math.min(100,distance/10000*100)+'%';
+        progressFill.style.width=(endless?((distance%1000)/1000*100):Math.min(100,distance/10000*100))+'%';
         if (gameState==='playing') requestAnimationFrame(gameLoop);
     }
-    function startGame(c){ initAudio(); localStorage.setItem('wm_lastChar',c); save.lastChar=c; resetGame(c,false,0); }
-    function continueGame(){ save=loadSave(); if(save.checkpoint<=0){ startGame(save.lastChar||'wei'); return; } initAudio(); resetGame(save.lastChar||'wei', false, save.checkpoint); }
-    function startFreeRun(){ if(!save.cleared) return; initAudio(); resetGame('wei',true); }
+    function startGame(c){ initAudio(); hardcore=false; endless=false; localStorage.setItem('wm_lastChar',c); save.lastChar=c; resetGame(c,false,0); }
+    function continueGame(){ save=loadSave(); hardcore=false; endless=false; if(save.checkpoint<=0){ startGame(save.lastChar||'wei'); return; } initAudio(); resetGame(save.lastChar||'wei', false, save.checkpoint); }
+    function startFreeRun(){ if(!save.cleared) return; initAudio(); hardcore=false; endless=false; resetGame('wei',true); }
+    // 通關後模式
+    function openLevelSelect(){ menuScreen.classList.add('hidden'); document.getElementById('levelSelect').classList.remove('hidden'); gameState='levelselect';
+        const grid=document.getElementById('levelGrid'); grid.innerHTML='';
+        for(let i=0;i<10;i++){ const ch=CHAPTERS[i], cell=document.createElement('div'); cell.className='lvl-cell';
+            cell.innerHTML='<div class="ln">'+(i+1)+(i===9?' ★':'')+'</div><div class="lt">'+ch.name+'</div>';
+            cell.onclick=()=>startAtLevel(i); grid.appendChild(cell); } }
+    function startAtLevel(idx){ initAudio(); hardcore=false; endless=false; resetGame(save.lastChar||'wei', false, idx); }
+    function startHardcore(){ if(!save.cleared) return; initAudio(); hardcore=true; endless=false; resetGame(save.lastChar||'wei', false, 0);
+        createFloatingText('一命挑戰！無存檔點，死亡即從頭', screenW*0.5-150, screenH*0.4, '#ff6b81'); }
+    function startEndless(){ if(!save.cleared) return; initAudio(); hardcore=false; endless=true; resetGame(save.lastChar||'wei', false, 0);
+        createFloatingText('♾️ 無盡模式！每關愈來愈快', screenW*0.5-130, screenH*0.4, '#7CFC9C'); }
+    function pauseGame(){ if(gameState!=='playing') return; gameState='paused';
+        document.getElementById('pauseInfo').innerHTML=`第${chapterIndex+1}章 ${curChapter().name}<br>里程 ${Math.floor(distance)}m　分數 ${score}`;
+        document.getElementById('pauseScreen').classList.remove('hidden');
+        document.getElementById('pauseBtn').classList.add('hidden'); }
+    function resumeGame(){ if(gameState!=='paused') return; gameState='playing';
+        document.getElementById('pauseScreen').classList.add('hidden');
+        document.getElementById('pauseBtn').classList.remove('hidden');
+        requestAnimationFrame(gameLoop); }
+    function pauseToMenu(){ document.getElementById('pauseScreen').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); showMenu(); }
 
     // ---------------- 結局 ----------------
     const ENDING_DIALOG = [ ['孟寶','我們真的到了耶。'], ['崴寶','嗯，10000 公尺，一步都沒少。'], ['孟寶','那……接下來要去哪裡？'], ['崴寶','你說呢？'] ];
@@ -1071,7 +1173,7 @@
     function triggerEnding() {
         endingTriggered=true; gameState='ending'; stopBGM(); setBgmSlice(9); startBGM(); recordStats();
         if (!save.cleared) { save.cleared=true; localStorage.setItem('wm_cleared','1'); }
-        hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); buildSakura(); drawTower(); endStep=0;
+        hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); buildSakura(); drawTower(); endStep=0;
         document.getElementById('endRewards').classList.add('hidden');
         document.getElementById('endTapHint').classList.remove('hidden');
         endingScreen.classList.remove('hidden'); renderEndStep();
@@ -1130,7 +1232,9 @@
         save=loadSave(); const b=document.getElementById('freeRunBtn');
         if (save.cleared) { b.disabled=false; b.textContent='自由漫跑'; menuScreen.classList.add('cleared'); }
         else { b.disabled=true; b.textContent='自由漫跑（未解鎖）'; }
+        const cm=document.getElementById('clearModesRow'); if (cm) cm.classList.toggle('hidden', !save.cleared);
         menuScreen.classList.toggle('night', plGetRaceWins()>=5);
+        if (plGetRaceWins()>=5) buildNightMenu();
         const cont=document.getElementById('continueBtn'), nl=document.getElementById('newGameLabel');
         if (save.checkpoint>0) {
             cont.classList.remove('hidden'); nl.classList.remove('hidden');
@@ -1138,8 +1242,9 @@
             cont.textContent=`繼續冒險　第${save.checkpoint+1}章 ${CHAPTERS[save.checkpoint].name}（${who}）`;
         } else { cont.classList.add('hidden'); nl.classList.add('hidden'); }
         const fc=document.getElementById('fusionCard');
-        if (fc) { fc.classList.toggle('hidden', plGetRaceWins()<20); }
-        if (plGetRaceWins()>=20) drawPreview('preFusion','fusion');
+        const fusionUnlocked = plGetRaceWins()>=20 || save.lastChar==='fusion';
+        if (fc) { fc.classList.toggle('hidden', !fusionUnlocked); }
+        if (fusionUnlocked) drawPreview('preFusion','fusion');
         if (isMobile) {
             const cb=document.getElementById('coopModeBtn'), rb=document.getElementById('raceModeBtn');
             cb.disabled=true; rb.disabled=true; cb.textContent='雙人合作（限電腦）'; rb.textContent='雙人競速（限電腦）';
@@ -1175,21 +1280,45 @@
             s.style.left=Math.random()*100+'%'; s.style.color='#fff'; s.style.fontSize=(12+Math.random()*14)+'px';
             s.style.animationDuration=(8+Math.random()*8)+'s'; s.style.animationDelay=(-Math.random()*12)+'s'; f.appendChild(s); }
     })();
+    let nightBuilt=false;
+    function buildNightMenu(){
+        if (nightBuilt) return; nightBuilt=true;
+        const bg=document.getElementById('nightBg'); if(!bg) return;
+        const lightCols=['#ffd24a','#7eb6ff','#ff8ab4','#9cff8a','#fff'];
+        for (let i=0;i<40;i++){ const d=document.createElement('div'); d.className='nlight';
+            d.style.left=Math.random()*100+'%'; d.style.top=(50+Math.random()*48)+'%';
+            d.style.background=lightCols[i%lightCols.length];
+            d.style.animationDuration=(1+Math.random()*2.2)+'s'; d.style.animationDelay=(-Math.random()*3)+'s';
+            d.style.boxShadow='0 0 6px '+lightCols[i%lightCols.length]; bg.appendChild(d); }
+        for (let i=0;i<16;i++){ const s=document.createElement('div'); s.className='sakura';
+            s.style.left=Math.random()*100+'%'; s.style.animationDuration=(7+Math.random()*7)+'s';
+            s.style.animationDelay=(-Math.random()*12)+'s'; bg.appendChild(s); }
+    }
 
     /* ============================================================
        雙人平台模式引擎（合作闖關 / 競速對決）— 與單機跑酷並存
        ============================================================ */
     const keyState = {};
     const GRAV=0.8, MAXFALL=18, MOVE_SPEED=5.4, JUMP_V=-15.6, FRICTION=0.78;
-    const P1CTRL={left:'KeyA',right:'KeyD',jump:'KeyW',slide:'KeyS',skill:'KeyE',item:'KeyQ'};
-    const P2CTRL={left:'ArrowLeft',right:'ArrowRight',jump:'ArrowUp',slide:'ArrowDown',skill:'ShiftRight',item:'Slash'};
+    const P1DEF={left:'KeyA',right:'KeyD',jump:'KeyW',slide:'KeyS',skill:'KeyE',item:'KeyQ'};
+    const P2DEF={left:'ArrowLeft',right:'ArrowRight',jump:'ArrowUp',slide:'ArrowDown',skill:'ShiftRight',item:'Slash'};
+    const P1CTRL={...P1DEF}, P2CTRL={...P2DEF};   // 物件引用固定，重綁時就地修改屬性
+    const KEY_ACTIONS=[['left','左移'],['right','右移'],['jump','跳'],['slide','滑/蹲'],['skill','技能'],['item','道具']];
+    function loadKeys(){ try{ const a=JSON.parse(localStorage.getItem('wm_keysP1')||'null'); if(a)Object.assign(P1CTRL,a); const b=JSON.parse(localStorage.getItem('wm_keysP2')||'null'); if(b)Object.assign(P2CTRL,b);}catch(e){} }
+    function saveKeys(){ localStorage.setItem('wm_keysP1',JSON.stringify(P1CTRL)); localStorage.setItem('wm_keysP2',JSON.stringify(P2CTRL)); }
+    function keyLabel(code){ if(!code) return '—';
+        if(code.startsWith('Key')) return code.slice(3);
+        if(code.startsWith('Digit')) return code.slice(5);
+        const m={ArrowLeft:'←',ArrowRight:'→',ArrowUp:'↑',ArrowDown:'↓',Space:'␣',ShiftLeft:'L⇧',ShiftRight:'R⇧',ControlLeft:'L Ctrl',ControlRight:'R Ctrl',Slash:'/',Comma:',',Period:'.',Semicolon:';',Enter:'⏎'};
+        return m[code]||code; }
+    loadKeys();
     const RACE_ITEMS=['cake','bolt','shield','note','troll'];
     const ITEM_NAME={cake:'草莓蛋糕 加速',bolt:'閃電 對方減速',shield:'護盾',note:'音符 操作反轉',troll:'酸民方塊'};
-    const PL={ mode:'coop', level:null, chars:[], raceDist:5000, startTime:0, dashCd:0, message:'', msgT:0, trollBlocks:[], tick:0, skin:false, flame:false, weddingMode:false };
+    const PL={ mode:'coop', level:null, chars:[], raceDist:5000, startTime:0, dashCd:0, message:'', msgT:0, tutT:0, trollBlocks:[], tick:0, skin:false, flame:false, weddingMode:false, sudden:false };
 
     const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
     const aabb=(a,b)=>a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
-    function plMsg(t){ PL.message=t; PL.msgT=120; }
+    function plMsg(t,dur){ PL.message=t; PL.msgT=dur||120; }
 
     // localStorage 解鎖
     function plGetCoopMax(){ return parseInt(localStorage.getItem('wm_coopMax')||'0',10); }
@@ -1410,7 +1539,7 @@
             if(Math.random()<0.45) hazards.push({x:x+200,y:GY-22,w:54,h:22,stun:true});
         }
         for(let x=440;x<W-720;x+=440) drops.push({x,y:GY-150,taken:false});
-        const boostZone={x:W-680,w:520};                          // 終點前加速帶
+        const boostZone = PL.sudden ? {x:W-1100,w:940} : {x:W-680,w:520};   // 黃金衝刺：更長更明顯的加速帶
         const goal={x:W-150,y:GY-150,w:62,h:150};
         return { theme:Math.min(9,Math.floor(dist/1500)), world:{w:W,h:H}, gy:GY, statics, hazards, coins, mechs, byId:{}, goal, drops, boostZone, p1:{x:50,y:GY-60}, p2:{x:120,y:GY-60} };
     }
@@ -1468,7 +1597,20 @@
             }
             const lead=PL.chars[0].x>PL.chars[1].x?0:1; ctx.textAlign='center'; ctx.fillStyle=cols[lead]; ctx.font='12px DotGothic16'; ctx.fillText('▲ 領先',lead===0?screenW*0.25:screenW*0.75,92);
         }
-        if(PL.message&&PL.msgT>0){ ctx.textAlign='center'; ctx.globalAlpha=Math.min(1,PL.msgT/40); ctx.fillStyle='#fff'; ctx.font='22px DotGothic16'; ctx.fillText(PL.message,screenW/2,screenH*0.32); ctx.globalAlpha=1; }
+        if(PL.message&&PL.msgT>0){ ctx.textAlign='center'; ctx.globalAlpha=Math.min(1,PL.msgT/40); ctx.fillStyle='#fff'; ctx.font='22px DotGothic16'; ctx.fillText(PL.message,screenW/2,screenH*0.30); ctx.globalAlpha=1; }
+        // 開場操作教學卡：清楚、置中、數秒後淡出
+        if(PL.tutT>0){
+            const a=Math.min(1,PL.tutT/45);
+            const bw=Math.min(580,screenW*0.88), bh=130, bx=screenW/2-bw/2, by=screenH*0.40;
+            ctx.globalAlpha=a; ctx.fillStyle='rgba(12,8,28,0.9)'; ctx.fillRect(bx,by,bw,bh);
+            ctx.strokeStyle='#ffd24a'; ctx.lineWidth=3; ctx.strokeRect(bx,by,bw,bh);
+            ctx.textAlign='center'; ctx.fillStyle='#ffd24a'; ctx.font='18px DotGothic16'; ctx.fillText('操作說明',screenW/2,by+28);
+            ctx.font='16px DotGothic16';
+            ctx.fillStyle='#7eb6ff'; ctx.fillText(`崴寶 P1　${keyLabel(P1CTRL.left)}${keyLabel(P1CTRL.right)} 移動 ・ ${keyLabel(P1CTRL.jump)} 跳 ・ ${keyLabel(P1CTRL.slide)} 滑 ・ ${keyLabel(P1CTRL.skill)} 技 ・ ${keyLabel(P1CTRL.item)} 道`, screenW/2, by+60);
+            ctx.fillStyle='#ffc14d'; ctx.fillText(`孟寶 P2　${keyLabel(P2CTRL.left)}${keyLabel(P2CTRL.right)} 移動 ・ ${keyLabel(P2CTRL.jump)} 跳 ・ ${keyLabel(P2CTRL.slide)} 滑 ・ ${keyLabel(P2CTRL.skill)} 技 ・ ${keyLabel(P2CTRL.item)} 道`, screenW/2, by+88);
+            ctx.fillStyle='#cbb8e0'; ctx.font='13px DotGothic16'; ctx.fillText('可在主選單「操作設定」自訂按鍵',screenW/2,by+114);
+            ctx.globalAlpha=1;
+        }
         ctx.restore();
     }
 
@@ -1496,7 +1638,7 @@
     }
     function plInteract(){
         const level=PL.level, a=PL.chars[0], b=PL.chars[1];
-        if(PL.dashCd>0)PL.dashCd--; if(PL.msgT>0)PL.msgT--;
+        if(PL.dashCd>0)PL.dashCd--; if(PL.msgT>0)PL.msgT--; if(PL.tutT>0)PL.tutT--;
         for(const c of level.coins){ if(c.got)continue; for(const ch of PL.chars){ if(aabb(ch.hb(),{x:c.x,y:c.y,w:22,h:22})){ c.got=true; ch.score+=100; sfx.eat(); } } }
         if(PL.mode==='coop'){
             [[a,b],[b,a]].forEach(([x,y])=>{ if(y.isDown&&aabb(x.hb(),{x:y.x,y:y.y-6,w:y.w,h:16})&&x.vy>=0){ y.isDown=false;y.hp=1;y.invT=120; sfx.eat(); plMsg('踩頭救援！'); } });
@@ -1535,8 +1677,11 @@
     function plMakeChars(){ const c1=new PlatChar('wei',P1CTRL), c2=new PlatChar('meng',P2CTRL);
         c1.spawn={x:PL.level.p1.x,y:PL.level.p1.y}; c2.spawn={x:PL.level.p2.x,y:PL.level.p2.y}; c1.resetFull(); c2.resetFull(); PL.chars=[c1,c2]; }
     function plHideScreens(){ ['menuScreen','coopSelect','raceSelect','gameOverScreen','plResult','galleryScreen','endingScreen','fragmentScreen','hud','swipeHint'].forEach(id=>{ const e=document.getElementById(id); if(e)e.classList.add('hidden'); }); }
-    function startCoop(idx){ initAudio(); PL.mode='coop'; PL.weddingMode=false; PL.skin=false; PL.flame=false; PL.trollBlocks=[]; PL.dashCd=0; PL.level=buildCoop(idx); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='coop'; setBgmSlice(idx); startBGM(); PL.startTime=performance.now(); plMsg('第'+(idx+1)+'關　一起抵達終點！'); requestAnimationFrame(plLoop); }
-    function startRace(){ initAudio(); PL.mode='race'; PL.weddingMode=false; PL.skin=plGetRaceWins()>=3; PL.flame=plGetRaceWins()>=1; PL.trollBlocks=[]; PL.level=buildRace(PL.raceDist); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='race'; setBgmSlice(PL.level.theme); startBGM(); PL.startTime=performance.now(); plMsg('預備…開跑！'); requestAnimationFrame(plLoop); }
+    function startCoop(idx){ initAudio(); PL.mode='coop'; PL.weddingMode=false; PL.skin=false; PL.flame=false; PL.trollBlocks=[]; PL.dashCd=0; PL.level=buildCoop(idx); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='coop'; document.getElementById('musicToggle').classList.add('bgm-side'); setBgmSlice(idx); startBGM(); PL.startTime=performance.now();
+        PL.tutT=300; plMsg(`第${idx+1}關　一起抵達終點！`, 200);
+        if(PL.level.hazards && PL.level.hazards.some(h=>h.needShield)) setTimeout(()=>{ if(gameState==='coop') plMsg('⚠️ 前方紅色護盾橋：需崴寶 E 傳遞護盾才不受傷！',420); }, 2200);
+        requestAnimationFrame(plLoop); }
+    function startRace(){ initAudio(); PL.mode='race'; PL.weddingMode=false; PL.skin=plGetRaceWins()>=3; PL.flame=plGetRaceWins()>=1; PL.trollBlocks=[]; PL.level=buildRace(PL.raceDist); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='race'; document.getElementById('musicToggle').classList.add('bgm-side'); setBgmSlice(PL.level.theme); startBGM(); PL.startTime=performance.now(); PL.tutT=PL.sudden?0:300; plMsg(PL.sudden?'⚡ 黃金衝刺！終點前的加速帶決勝負！':'預備…開跑！', PL.sudden?300:120); requestAnimationFrame(plLoop); }
     function plExit(){ document.getElementById('plTouch').classList.add('hidden'); showMenu(); }
     function plShowResult(title,body,btns){ stopBGM(); document.getElementById('plTouch').classList.add('hidden');
         document.getElementById('plResultTitle').textContent=title; document.getElementById('plResultBody').innerHTML='<div class="rline">'+body+'</div>';
@@ -1553,7 +1698,27 @@
         '崴寶＋孟寶＝無敵。',
         '慢一點沒關係，重要的是一起。',
         '剛剛那一跳超帥，不過我才不會說出來。',
-        '下一關換我罩你，放心衝。'
+        '下一關換我罩你，放心衝。',
+        '草莓蛋糕的顆粒，分你一半。',
+        '三百天不算什麼，我們要三百個三百天。',
+        '你是我的護盾，我是你的彈跳板。',
+        '就算地圖再大，我也只想往你那格跑。',
+        '愛你不用解鎖，是預設值。',
+        '我們的存檔，永遠不會被覆蓋。',
+        '前面有坑？沒事，我先幫你試。',
+        '你笑一下，我這關就值得了。',
+        '一起暈眩、一起復活，這就是我們。',
+        '別怕酸民方塊，我們有彼此的 buff。',
+        '我願意當你的二段跳。',
+        '你的最佳紀錄，我來當見證人。',
+        '同框就是最好的成就。',
+        '你按技能，我就懂你的意思。',
+        '我們不比速度，我們比默契。',
+        '晴空塔等我們，但我更想看你。',
+        '牽好囉，這段路有點顛。',
+        '就算 Game Over，我也要跟你同一個畫面。',
+        '你是我的 player 2，永久綁定。',
+        '到終點先親一下再說。'
     ];
     function coopWord(){ return COOP_WORDS[Math.floor(Math.random()*COOP_WORDS.length)]; }
     function plWin(){ const idx=PL.level.theme; if(idx+1>plGetCoopMax()) plSetCoopMax(Math.min(10,idx+1)); sfx.chord();
@@ -1562,8 +1727,9 @@
             [ {t:'下一關',f:()=>startCoop(idx+1)}, {t:'重玩',f:()=>startCoop(idx)}, {t:'回主選單',f:plExit} ]); }
     function plFail(){ sfx.hit(); plShowResult('兩人都倒下了…','第'+(PL.level.theme+1)+'關 失敗　再試一次！',[ {t:'重玩本關',f:()=>startCoop(PL.level.theme)}, {t:'回主選單',f:plExit} ]); }
     function plRaceEnd(winner){ sfx.chord(); plSetRaceWins(plGetRaceWins()+1); const nm=winner===0?'崴寶':'孟寶';
-        const unlocked=plRaceMilestone(); plShowResult(nm+' 獲勝！','賽道 '+PL.raceDist+'m　用時 '+((performance.now()-PL.startTime)/1000).toFixed(1)+' 秒　累積勝場 '+plGetRaceWins()+(unlocked?'<br><span style="color:#ffd24a;">解鎖：'+unlocked+'</span>':''),[ {t:'再來一場',f:startRace}, {t:'回主選單',f:plExit} ]); }
-    function plRaceTie(){ sfx.hit(); plShowResult('平手！','兩人同時抵達終點！<br>加賽 1500m 一決勝負',[ {t:'加賽決勝',f:()=>{ PL.raceDist=1500; startRace(); }}, {t:'回主選單',f:plExit} ]); }
+        const wasSudden=PL.sudden; PL.sudden=false;
+        const unlocked=plRaceMilestone(); plShowResult(nm+(wasSudden?' 黃金衝刺獲勝！':' 獲勝！'),'賽道 '+PL.raceDist+'m　用時 '+((performance.now()-PL.startTime)/1000).toFixed(1)+' 秒　累積勝場 '+plGetRaceWins()+(unlocked?'<br><span style="color:#ffd24a;">解鎖：'+unlocked+'</span>':''),[ {t:'再來一場',f:startRace}, {t:'回主選單',f:plExit} ]); }
+    function plRaceTie(){ sfx.hit(); plShowResult('平手！','兩人同時抵達終點！<br>⚡ 進入「黃金衝刺」：終點前出現超長加速帶，誰先衝線誰贏！',[ {t:'⚡ 黃金衝刺！',f:()=>{ PL.sudden=true; PL.raceDist=1200; startRace(); }}, {t:'回主選單',f:plExit} ]); }
     function plRaceMilestone(){ const w=plGetRaceWins(); if(w===1)return '賽車尾焰'; if(w===3)return '婚紗/西裝皮膚'; if(w===5)return '東京夜景背景'; if(w===20)return '隱藏角色：合體版崴孟（單機）'; return ''; }
     function plUnlockText(){ const rw=plGetRaceWins(), cm=plGetCoopMax(), wed=localStorage.getItem('wm_wedding')==='1', list=[];
         if(cm>=1)list.push('合作關卡'); if(wed)list.push('晴空塔婚禮結局'); if(rw>=1)list.push('賽車尾焰'); if(rw>=3)list.push('婚紗/西裝皮膚'); if(rw>=5)list.push('東京夜景背景'); if(rw>=20)list.push('合體版崴孟（單機隱藏角色）');
@@ -1590,17 +1756,53 @@
         document.getElementById('weddingScreen').classList.remove('hidden'); gameState='plresult'; }
 
     // ---------- 平台模式選單 ----------
-    function openCoopSelect(){ if(isMobile){ alert('雙人模式需要鍵盤，請改用電腦遊玩'); return; } plHideScreens(); document.getElementById('coopSelect').classList.remove('hidden'); gameState='coopselect';
+    function showToast(msg){
+        const t=document.createElement('div'); t.textContent=msg;
+        t.style.cssText='position:fixed;left:50%;top:20%;transform:translateX(-50%);background:rgba(24,12,46,.94);color:#ffe9f4;border:2px solid #ffb3d1;padding:12px 18px;border-radius:14px;font-family:"DotGothic16",sans-serif;font-size:15px;line-height:1.5;z-index:200;box-shadow:0 6px 20px rgba(0,0,0,.45);max-width:80vw;text-align:center;white-space:pre-line;opacity:0;transition:opacity .25s;';
+        document.body.appendChild(t); requestAnimationFrame(()=>t.style.opacity='1');
+        setTimeout(()=>{ t.style.opacity='0'; setTimeout(()=>t.remove(),300); }, 2800);
+    }
+    function openCoopSelect(){ if(isMobile){ showToast('雙人模式需要鍵盤 ⌨️\n請改用電腦遊玩～'); return; } plHideScreens(); document.getElementById('coopSelect').classList.remove('hidden'); gameState='coopselect';
         const grid=document.getElementById('coopGrid'); grid.innerHTML=''; const mx=plGetCoopMax();
         for(let i=0;i<10;i++){ const ch=CHAPTERS[i], cell=document.createElement('div'); const locked=i>mx;
             cell.className='lvl-cell'+(locked?' locked':''); cell.innerHTML='<div class="ln">'+(i+1)+(i===9?' ★':'')+'</div><div class="lt">'+(locked?'未解鎖':ch.name)+'</div>';
             if(!locked) cell.onclick=()=>startCoop(i); grid.appendChild(cell); }
         document.getElementById('coopUnlock').innerHTML='已解鎖：'+plUnlockText();
         const wb=document.getElementById('coopWeddingBtn'); wb.classList.toggle('hidden', localStorage.getItem('wm_wedding')!=='1');
+        refreshCtrlTags();
     }
-    function openRaceSelect(){ if(isMobile){ alert('雙人模式需要鍵盤，請改用電腦遊玩'); return; } plHideScreens(); document.getElementById('raceSelect').classList.remove('hidden'); gameState='raceselect'; plSyncRaceOpts();
-        document.getElementById('raceUnlock').innerHTML='累積勝場 '+plGetRaceWins()+'　已解鎖：'+plUnlockText(); }
+    function openRaceSelect(){ if(isMobile){ showToast('雙人模式需要鍵盤 ⌨️\n請改用電腦遊玩～'); return; } PL.sudden=false; plHideScreens(); document.getElementById('raceSelect').classList.remove('hidden'); gameState='raceselect'; plSyncRaceOpts();
+        document.getElementById('raceUnlock').innerHTML='累積勝場 '+plGetRaceWins()+'　已解鎖：'+plUnlockText(); refreshCtrlTags(); }
     function plSyncRaceOpts(){ document.querySelectorAll('#raceOpts .btn').forEach(b=>{ b.classList.toggle('sel', parseInt(b.dataset.d,10)===PL.raceDist); }); }
+
+    // ---------- 操作說明 / 自訂按鍵 ----------
+    function ctrlSummary(ctrl){ return `${keyLabel(ctrl.left)}${keyLabel(ctrl.right)} 移動・${keyLabel(ctrl.jump)} 跳・${keyLabel(ctrl.slide)} 滑・${keyLabel(ctrl.skill)} 技能・${keyLabel(ctrl.item)} 道具`; }
+    function refreshCtrlTags(){
+        const c=document.getElementById('coopCtrlTag'); if(c) c.innerHTML=`崴寶(P1) <b>${ctrlSummary(P1CTRL)}</b><br>孟寶(P2) <b>${ctrlSummary(P2CTRL)}</b><br>兩人一起抵達終點即過關。可互相救援、合體衝刺(靠近同按技能)。`;
+        const r=document.getElementById('raceCtrlTag'); if(r) r.innerHTML=`崴寶(P1) <b>${ctrlSummary(P1CTRL)}</b>　｜　孟寶(P2) <b>${ctrlSummary(P2CTRL)}</b>`;
+    }
+    let keyCap={active:false, ctrl:null, act:null};
+    function buildKeyGrid(){
+        const wrap=document.getElementById('keyGrid'); wrap.innerHTML='';
+        [['崴寶 P1',P1CTRL,'p1','#7eb6ff'],['孟寶 P2',P2CTRL,'p2','#ffc14d']].forEach(([name,ctrl,tag,col])=>{
+            const col1=document.createElement('div'); col1.style.cssText='min-width:150px;';
+            col1.innerHTML=`<div style="color:${col};font-weight:bold;margin-bottom:8px;">${name}</div>`;
+            KEY_ACTIONS.forEach(([act,label])=>{
+                const row=document.createElement('div'); row.style.cssText='display:flex;justify-content:space-between;align-items:center;gap:10px;margin:5px 0;';
+                const isCap=keyCap.active&&keyCap.ctrl===ctrl&&keyCap.act===act;
+                row.innerHTML=`<span style="font-size:13px;">${label}</span>`;
+                const b=document.createElement('button'); b.className='btn btn-small'; b.style.cssText='min-width:54px;padding:5px 8px;font-size:13px;';
+                b.textContent=isCap?'按鍵…':keyLabel(ctrl[act]);
+                b.onclick=()=>{ keyCap={active:true,ctrl,act}; buildKeyGrid(); };
+                row.appendChild(b); col1.appendChild(row);
+            });
+            wrap.appendChild(col1);
+        });
+    }
+    function openKeySetup(){ plHideScreens(); document.getElementById('keySetup').classList.remove('hidden'); gameState='keysetup'; keyCap={active:false,ctrl:null,act:null}; buildKeyGrid(); }
+    function closeKeySetup(){ keyCap={active:false,ctrl:null,act:null}; saveKeys(); refreshCtrlTags(); showMenu(); }
+    function resetKeys(){ Object.assign(P1CTRL,P1DEF); Object.assign(P2CTRL,P2DEF); saveKeys(); keyCap={active:false,ctrl:null,act:null}; buildKeyGrid(); }
+    function applyKeyCapture(code){ if(!keyCap.active) return; if(code!=='Escape'){ keyCap.ctrl[keyCap.act]=code; } keyCap.active=false; saveKeys(); buildKeyGrid(); }
 
     // ---------- 觸控虛擬鍵 ----------
     (function bindTouch(){
@@ -1618,6 +1820,8 @@
     // ---------------- 輸入 ----------------
     window.addEventListener('keydown',(e)=>{
         keyState[e.code]=true;
+        if (keyCap.active){ e.preventDefault(); applyKeyCapture(e.code); return; }
+        if (gameState==='keysetup'){ return; }
         if (gameState==='coop'||gameState==='race'){ initAudio(); if(e.code==='Escape'){ plExit(); return; } plKeyDown(e.code); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); return; }
         if (gameState==='ending'){ advanceEnding(); return; }
         if (gameState==='qte'){ initAudio();
@@ -1626,6 +1830,8 @@
             else { const map={ArrowLeft:'崴',KeyA:'崴',ArrowRight:'孟',KeyD:'孟'};   // 繞口令 / BOSS：左=崴、右=孟
                 if (map[e.code]){ e.preventDefault(); handleQTEInput(map[e.code]); } }
             return; }
+        if (gameState==='paused'){ if(e.code==='Escape'||e.code==='KeyP'||e.code==='Enter') resumeGame(); return; }
+        if (gameState==='playing' && (e.code==='Escape'||e.code==='KeyP')){ pauseGame(); return; }
         if (gameState!=='playing') return; initAudio();
         if (e.code==='Space'||e.code==='ArrowUp'||e.code==='KeyW') player.jump();
         if (e.code==='ArrowDown'||e.code==='KeyS') { player.slideHeld=true; player.slide(true); }
