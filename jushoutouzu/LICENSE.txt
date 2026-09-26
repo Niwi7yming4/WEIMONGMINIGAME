@@ -1,0 +1,5 @@
+Copyright (c) 2026. All Rights Reserved.
+
+This project and its source code, game logic, visual presentation, original assets, documentation, and related materials are proprietary.
+
+No permission is granted to copy, modify, redistribute, sublicense, publish, sell, or create derivative works without prior written authorization from the copyright holder.
