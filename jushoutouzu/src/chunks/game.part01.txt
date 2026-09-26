@@ -1,0 +1,145 @@
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
+
+const $ = q => document.querySelector(q);
+const ui = {
+  menu:$('#menu'),hud:$('#hud'),upgrade:$('#upgrade'),pause:$('#pause'),result:$('#result'),
+  start:$('#startBtn'),coop:$('#coopBtn'),coopState:$('#coopState'),skins:$('#skinsBtn'),skinPanel:$('#skinPanel'),skinList:$('#skinList'),closeSkin:$('#closeSkin'),
+  meta:$('#metaBtn'),metaPanel:$('#metaPanel'),metaText:$('#metaText'),closeMeta:$('#closeMeta'),diff:$('#diffBtn'),diffState:$('#diffState'),
+  lv:$('#lv'),xp:$('#xpFill'),time:$('#time'),kills:$('#kills'),combo:$('#combo'),comboNum:$('#comboNum'),timeline:$('#timelineFill'),
+  hp1:$('#hp1'),hp1text:$('#hp1text'),hp2:$('#hp2'),hp2text:$('#hp2text'),p2:$('.p2'),bossWrap:$('#bossWrap'),bossFill:$('#bossFill'),splitHint:$('#splitHint'),
+  buildStrip:$('#buildStrip'),cards:$('#cards'),upgradeOwner:$('#upgradeOwner'),pauseBuild:$('#pauseBuild'),
+  resultTitle:$('#resultTitle'),resTime:$('#resTime'),resKills:$('#resKills'),resLv:$('#resLv'),resTheme:$('#resTheme'),
+  resume:$('#resumeBtn'),quit:$('#quitBtn'),menuBtn:$('#menuBtn'),retry:$('#retryBtn'),mute:$('#muteBtn'),toast:$('#toastLayer'),debug:$('#debugBadge'),
+  touch:$('#touchControls'),touchStick:$('#touchStick'),touchKnob:$('#touchKnob'),touchDash:$('#touchDash'),screenFlash:$('#screenFlash'),hitVignette:$('#hitVignette'),
+  tempoFill:$('#tempoFill'),eventBanner:$('#eventBanner'),eventBannerTitle:$('#eventBannerTitle'),eventBannerSub:$('#eventBannerSub'),menuSkinName:$('#menuSkinName'),menuMode:$('#menuMode'),menuDiff:$('#menuDiff'),menuUnlock:$('#menuUnlock')
+};
+
+const canvas=$('#game');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance',alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.65));
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputColorSpace=THREE.SRGBColorSpace; renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=1.08;
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x101014,.021);
+const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,.1,190), camP1=camera.clone(), camP2=camera.clone();
+const clock=new THREE.Clock(), loader=new GLTFLoader();
+const vA=new THREE.Vector3(),vB=new THREE.Vector3(),vC=new THREE.Vector3();
+const qTmp=new THREE.Quaternion(),qPose=new THREE.Quaternion();
+const raycaster=new THREE.Raycaster(),groundPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),pointerNdc=new THREE.Vector2(),pointerHit=new THREE.Vector3();
+const COLORS={yellow:0xffe300,magenta:0xff0055,cyan:0x00eaff,paper:0xf7f4e9,black:0x0b0b0e,green:0x79ff3b,red:0xff2244,purple:0x9a50ff,orange:0xff8a00,white:0xffffff};
+const CSSCOL={projectile:'#00eaff',orbit:'#ffe300',aura:'#ff0055',chain:'#9a50ff',summon:'#79ff3b',burst:'#ff8a00'};
+const ARENA=38,GOAL_BOSS=15*60,GOAL_CLEAR=18*60,MAX_ENEMIES=360,isTouch=matchMedia('(pointer:coarse)').matches;
+const STATIC_PREVIEW=location.hostname.endsWith('github.io')||new URLSearchParams(location.search).has('fallback');
+
+const SKINS=[
+ {name:'虛照德烈',path:'./assets/models/skin_xuzhao_delei.glb',unlock:0},
+ {name:'德烈流螢',path:'./assets/models/skin_delei_liuying.glb',unlock:0},
+ {name:'虛照德烈 / CYAN INK',path:'./assets/models/skin_xuzhao_delei.glb',tint:0x70ffff,unlock:1},
+ {name:'德烈流螢 / MAGENTA CUT',path:'./assets/models/skin_delei_liuying.glb',tint:0xff86b9,unlock:2},
+];
+const THEMES=[
+ {name:'直播間廢墟',bg:0x130d14,floor:0x261d2b,line:0xff0055,fog:0x130d14,deco:[0x00eaff,0xff0055],signs:['LIVE','CHAT','404']},
+ {name:'漫展會場',bg:0x121a20,floor:0x26343b,line:0xffe300,fog:0x121a20,deco:[0xffe300,0x00eaff],signs:['COS','STAGE','QUEUE']},
+ {name:'網路廢墟',bg:0x06161b,floor:0x0d2930,line:0x00eaff,fog:0x06161b,deco:[0x00eaff,0xffffff],signs:['404','NO SIGNAL','CACHE']},
+ {name:'綜藝棚',bg:0x211014,floor:0x351820,line:0xff8a00,fog:0x211014,deco:[0xff0055,0xffe300],signs:['APPLAUSE','CUT','LIVE']},
+ {name:'演算法深淵',bg:0x080810,floor:0x151523,line:0x9a50ff,fog:0x080810,deco:[0x9a50ff,0x00eaff],signs:['FOR YOU','∞','TREND']},
+];
+
+const WEAPONS={
+ projectile:{name:'追蹤彈',icon:'➤',color:COLORS.cyan,max:5,feel:'精準連射',evo:'barrage',levels:['單發追蹤','雙連射','穿透 +1','命中後延遲回聲彈','五發扇形連射']},
+ orbit:{name:'刃輪',icon:'✦',color:COLORS.yellow,max:5,feel:'貼身切割',evo:'grinder',levels:['2 枚刃輪','3 枚刃輪','內外半徑交錯','命中帶推力','5 枚雙速刃輪']},
+ aura:{name:'躁動場',icon:'◉',color:COLORS.magenta,max:5,feel:'節拍脈衝',evo:'bloodpool',levels:['短距脈衝','範圍擴張','脈衝更快','命中帶緩速','雙拍脈衝']},
+ chain:{name:'斷網雷',icon:'ϟ',color:COLORS.purple,max:5,feel:'連鎖爆點',evo:'chainburst',levels:['2 次彈跳','3 次彈跳','末端爆裂','優先跳未命中目標','雙路分叉']},
+ summon:{name:'小幫手',icon:'◆',color:COLORS.green,max:5,feel:'編隊交叉火力',evo:'army',unlock:1,levels:['1 架追射','2 架編隊','三角隊形','穿插射擊','5 架環形隊']},
+ burst:{name:'隨機爆點',icon:'✹',color:COLORS.orange,max:5,feel:'預警→重落點',unlock:2,levels:['單點砸落','爆心擴大','雙落點','碎片二次爆','三連重砸']},
+};
+const PASSIVES={
+ attackSpeed:{name:'攻速',icon:'⚡',desc:'所有武器循環加快 10%',max:5},attack:{name:'攻擊力',icon:'💪',desc:'所有傷害 +15%',max:5},area:{name:'範圍',icon:'📡',desc:'尺寸與作用範圍 +12%',max:5},speed:{name:'跑速',icon:'👟',desc:'移動速度 +8%',max:5},lifesteal:{name:'吸血',icon:'🩸',desc:'造成傷害時回復生命',max:5},crit:{name:'爆擊',icon:'🎲',desc:'爆擊率 +8%',max:5},xp:{name:'經驗',icon:'✨',desc:'經驗取得 +12%',max:5},pickup:{name:'磁力',icon:'🧲',desc:'撿取半徑 +22%',max:5},
+};
+const EVOLUTIONS={
+ barrage:{name:'彈幕風暴',icon:'≋',weapon:'projectile',passive:'attackSpeed',desc:'扇形變成持續左右掃射，命中留下青色速度痕。'},
+ grinder:{name:'巨型絞肉機',icon:'☠',weapon:'orbit',passive:'area',desc:'雙層反向刃環，近身區域徹底變成切割帶。'},
+ bloodpool:{name:'血池',icon:'●',weapon:'aura',passive:'lifesteal',desc:'脈衝改成吸入式血池，敵群向中心拖曳並大量回復。'},
+ chainburst:{name:'連鎖爆裂',icon:'ϟ',weapon:'chain',passive:'crit',desc:'每次雷鏈接點都炸開，不再只有線傷害。'},
+ army:{name:'大軍',icon:'◆◆',weapon:'summon',passive:'attack',desc:'9 架小幫手分成兩圈，交替齊射。'},
+};
+
+const FORMS={
+ projectile:{
+  needle:{name:'穿心型',short:'穿',icon:'➤',desc:'少量高速重彈；穿透更深，命中後再補一拍回聲。',metrics:['單點 S','穿透 S','覆蓋 C']},
+  sweep:{name:'掃街型',short:'掃',icon:'≋',desc:'彈量與扇角大增；單發較輕，用密度把路徑洗乾淨。',metrics:['單點 C','彈量 S','覆蓋 A']}
+ },
+ orbit:{
+  close:{name:'貼身型',short:'近',icon:'✦',desc:'半徑縮小、轉速提高；靠走位把近身區切成高 DPS 刃帶。',metrics:['近傷 S','半徑 C','轉速 S']},
+  wide:{name:'外環型',short:'廣',icon:'◎',desc:'半徑與碰撞面積擴大；轉速較慢，但推力與控場更強。',metrics:['近傷 B','半徑 S','控場 A']}
+ },
+ aura:{
+  beat:{name:'重拍型',short:'拍',icon:'◉',desc:'脈衝變慢但每拍更重；收縮後才爆開，命中感明顯。',metrics:['單拍 S','頻率 C','控場 A']},
+  field:{name:'長鳴型',short:'鳴',icon:'◎',desc:'傷害拆成高頻小拍；範圍更大、緩速更穩定。',metrics:['單拍 C','頻率 S','控場 S']}
+ },
+ chain:{
+  crack:{name:'裂點型',short:'裂',icon:'ϟ',desc:'跳數減少、接點更重；每次主命中後延遲出第二拍空間裂響。',metrics:['接點 S','跳數 C','二拍 S']},
+  fork:{name:'分叉型',short:'叉',icon:'⌁',desc:'主傷害下降，換成更多跳點與分支，清群密度大幅上升。',metrics:['接點 B','跳數 S','清群 S']}
+ },
+ summon:{
+  ace:{name:'領航機',short:'領',icon:'◆',desc:'少量高火力機體；射速較慢，但單發與穿透顯著提升。',metrics:['單發 S','數量 C','穿透 A']},
+  swarm:{name:'蜂群型',short:'群',icon:'◆◆',desc:'更多小機體與交錯射線；單發變輕，火網覆蓋最大。',metrics:['單發 C','數量 S','覆蓋 S']}
+ },
+ burst:{
+  meteor:{name:'天墜型',short:'墜',icon:'✹',desc:'只留少數重落點；預警更長，落地範圍、傷害、震感都更大。',metrics:['單點 S','數量 C','震感 S']},
+  scatter:{name:'散爆型',short:'散',icon:'✺',desc:'同一輪多個小落點快速砸下；單點較輕，封路能力更強。',metrics:['單點 B','數量 S','封路 S']}
+ }
+};
+const FORM_ORDER={projectile:['needle','sweep'],orbit:['close','wide'],aura:['beat','field'],chain:['crack','fork'],summon:['ace','swarm'],burst:['meteor','scatter']};
+const TECHNIQUE_BEATS={projectile:{wind:.065,recover:.14},chain:{wind:.09,recover:.18},aura:{wind:.12,recover:.19},burst:{wind:.16,recover:.24},summon:{wind:.05,recover:.12}};
+
+/* R4 locomotion source: the official Three.js Soldier example contains Idle / Walk / Run clips.
+   We only sample its animation at runtime and retarget it onto the user's already-rigged GLBs. */
+const LOCOMOTION_SOURCE_URL='https://cdn.jsdelivr.net/gh/mrdoob/three.js@r180/examples/models/gltf/Soldier.glb';
+const HUMANOID_BONE_MAP={
+ Pelvis:'mixamorigHips',Waist:'mixamorigSpine',Spine01:'mixamorigSpine1',Spine02:'mixamorigSpine2',Neck:'mixamorigNeck',Head:'mixamorigHead',
+ L_Clavicle:'mixamorigLeftShoulder',L_Upperarm:'mixamorigLeftArm',L_Forearm:'mixamorigLeftForeArm',L_Hand:'mixamorigLeftHand',
+ R_Clavicle:'mixamorigRightShoulder',R_Upperarm:'mixamorigRightArm',R_Forearm:'mixamorigRightForeArm',R_Hand:'mixamorigRightHand',
+ L_Thigh:'mixamorigLeftUpLeg',L_Calf:'mixamorigLeftLeg',L_Foot:'mixamorigLeftFoot',L_ToeBase:'mixamorigLeftToeBase',
+ R_Thigh:'mixamorigRightUpLeg',R_Calf:'mixamorigRightLeg',R_Foot:'mixamorigRightFoot',R_ToeBase:'mixamorigRightToeBase'
+};
+let locomotionSourcePromise=null;
+function findSkinned(root){let hit=null;root?.traverse?.(o=>{if(!hit&&o.isSkinnedMesh)hit=o;});return hit;}
+function loadLocomotionSource(){if(!locomotionSourcePromise)locomotionSourcePromise=new Promise((resolve,reject)=>loader.load(LOCOMOTION_SOURCE_URL,g=>resolve(g),undefined,reject));return locomotionSourcePromise;}
+
+const ENCOUNTER_SCRIPT=[
+ {at:18,id:'wodaLane',name:'我打・開門暴走',sub:'第一波直接切線進場；先動起來',color:'var(--magenta)',duration:14,spawnMul:.46},
+ {at:42,id:'hertaRing',name:'黑塔轉圈圈・第一圈',sub:'外圈開始收縮；近身與遠程第一次分流',color:'var(--purple)',duration:16,spawnMul:.58},
+ {at:72,id:'teaRitual',name:'好茶搖一搖・增殖茶會',sub:'先拆召喚核心，不然小怪會爆量',color:'var(--yellow)',duration:20,spawnMul:.42},
+ {at:118,id:'jumpRain',name:'戰神起跳・紅圈雨',sub:'連續落點改變走位節奏',color:'var(--magenta)',duration:18,spawnMul:.38},
+ {at:165,id:'reward',name:'演算法返利・第一次爆裝',sub:'全場經驗磁吸、回血、FLOW 加速',color:'var(--cyan)',duration:11,spawnMul:0},
+ {at:220,id:'textMirror',name:'請輸入文本・鏡像追跡',sub:'複製舊移動方向；突然改線就能甩掉',color:'var(--paper)',duration:22,spawnMul:.48},
+ {at:278,id:'networkStorm',name:'網路風暴・第一次混編',sub:'多種敵人同步進場；BUILD 開始接受壓力測試',color:'var(--cyan)',duration:24,spawnMul:1.08},
+ {at:355,id:'hertaRing',name:'黑塔轉圈圈・反向封鎖',sub:'第二圈更密；逼近身流派換角度',color:'var(--purple)',duration:20,spawnMul:.70},
+ {at:430,id:'jumpRain',name:'戰神起跳・密集落點',sub:'紅圈與普通怪疊加，不只考輸出',color:'var(--magenta)',duration:22,spawnMul:.48},
+ {at:515,id:'reward',name:'演算法返利・第二次爆裝',sub:'清屏喘息，讓下一個流派節點快速成形',color:'var(--cyan)',duration:12,spawnMul:0},
+ {at:585,id:'apeWatch',name:'願猿神三度為你闔眼',sub:'三點鎖定追獵；清出一條逃生路',color:'var(--orange)',duration:24,spawnMul:.52},
+ {at:665,id:'networkStorm',name:'網路風暴・高壓混編',sub:'遠近、厚血、衝刺同場；流派差異會被放大',color:'var(--cyan)',duration:30,spawnMul:1.22},
+ {at:748,id:'teaRitual',name:'好茶搖一搖・過量增殖',sub:'召喚核心變成真正的優先目標',color:'var(--yellow)',duration:26,spawnMul:.56},
+ {at:825,id:'bossPrelude',name:'抽象濃度超標',sub:'Boss 前最後一輪：起跳、轉圈、猿神混編',color:'var(--magenta)',duration:34,spawnMul:1.32}
+];
+
+const ENEMY_DEFS={
+ ape:{name:'猿神，启动',color:0xff8a00,hp:31,speed:2.0,dmg:10,size:.72},thunder:{name:'爱上雷神',color:0x00eaff,hp:30,speed:2.35,dmg:9,size:.68},tea:{name:'来杯好茶摇一摇',color:0xffe300,hp:45,speed:.52,dmg:7,size:.8},woda:{name:'我打',color:0xff0055,hp:23,speed:3.45,dmg:5,size:.58},text:{name:'请输入文本',color:0xffffff,hp:40,speed:2.0,dmg:11,size:.72},sleep:{name:'睡蕉小猴',color:0x91ff66,hp:28,speed:2.9,dmg:12,size:.62},spine:{name:'无脊椎万敌',color:0x9a50ff,hp:105,speed:.78,dmg:13,size:.88},jump:{name:'战神起跳',color:0xff4a33,hp:52,speed:1.45,dmg:16,size:.82},herta:{name:'黑塔转圈圈',color:0xdd88ff,hp:37,speed:1.8,dmg:9,size:.68},
+};
+
+const state={mode:'menu',atmosphereAcc:0,onboardStage:0,bannerTimer:0,coop:false,difficulty:1,skin:0,selectedCard:0,time:0,timeScale:1,kills:0,boss:null,bossSpawned:false,cleared:false,theme:THEMES[0],players:[],enemies:[],projectiles:[],orbs:[],effects:[],residues:[],summons:[],upgrades:[],upgradeQueue:[],spawnAcc:0,elite5:false,elite10:false,waveBeat:0,fxHigh:true,muted:false,hitstop:0,shake:0,fovPunch:0,flash:0,vignette:0,combo:0,comboTimer:0,lastPickupSfx:0,buildSig:'',menuT:0,mouseAimUntil:0,mouseAimDir:new THREE.Vector3(0,0,-1),directorIndex:0,directorEvent:null,eventTick:0,rewardVacuum:0};
+const keys=new Set(),touchAxis={x:0,z:0,dash:false},gamepadLatch=[false,false],modelCache=new Map();
+const meta=loadMeta();
+function loadMeta(){try{return Object.assign({clears:0,highestDifficulty:1},JSON.parse(localStorage.getItem('jsTZ_meta')||'{}'));}catch{return{clears:0,highestDifficulty:1};}}
+function saveMeta(){localStorage.setItem('jsTZ_meta',JSON.stringify(meta));}
+
+/* ------------------------- PROGRAMMATIC AUDIO ------------------------- */
+class AudioBus{
+ constructor(){this.ctx=null;this.master=null;this.comp=null;this.noise=null;this.pickupStep=0;this.lastPickupT=0;this.lastKillT=0;}
+ ensure(){if(state.muted)return null;if(!this.ctx){this.ctx=new (window.AudioContext||window.webkitAudioContext)();this.master=this.ctx.createGain();this.master.gain.value=.55;this.comp=this.ctx.createDynamicsCompressor();this.comp.threshold.value=-18;this.comp.knee.value=15;this.comp.ratio.value=5;this.comp.attack.value=.003;this.comp.release.value=.12;this.master.connect(this.comp).connect(this.ctx.destination);const b=this.ctx.createBuffer(1,this.ctx.sampleRate*.4,this.ctx.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*(1-i/d.length);this.noise=b;}if(this.ctx.state==='suspended')this.ctx.resume();return this.ctx;}
+ tone(freq,dur=.06,type='square',gain=.03,slide=1,when=0){const c=this.ensure();if(!c)return;const o=c.createOscillator(),g=c.createGain(),t=c.currentTime+when;o.type=type;o.frequency.setValueAtTime(Math.max(30,freq),t);o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*slide),t+dur);g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);o.connect(g).connect(this.master);o.start(t);o.stop(t+dur+.01);}
+ hiss(dur=.05,gain=.02,cut=1800,when=0){const c=this.ensure();if(!c)return;const s=c.createBufferSource(),f=c.createBiquadFilter(),g=c.createGain(),t=c.currentTime+when;s.buffer=this.noise;f.type='bandpass';f.frequency.value=cut;f.Q.value=.7;g.gain.setValueAtTime(gain,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);s.connect(f).connect(g).connect(this.master);s.start(t);s.stop(t+dur+.01);}
+ dash(){this.tone(120,.09,'sawtooth',.035,4);this.hiss(.09,.025,2600);}
+ pickup(){const c=this.ensure();if(!c)retur
