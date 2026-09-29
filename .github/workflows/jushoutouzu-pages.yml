@@ -41,6 +41,8 @@ jobs:
           ! test -e jushoutouzu/src/chunks/game.part07.txt
           grep -q 'const PARTS=6' jushoutouzu/src/boot.js
           grep -q 'PLAY NOW' jushoutouzu/index.html
+          cat jushoutouzu/src/chunks/game.part{01,02,03,04,05,06}.txt > /tmp/jushoutouzu-game.mjs
+          node --check /tmp/jushoutouzu-game.mjs
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
