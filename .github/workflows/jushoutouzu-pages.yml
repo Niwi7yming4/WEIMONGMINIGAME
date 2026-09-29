@@ -1,0 +1,52 @@
+name: Deploy Jushoutouzu Quickplay
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'jushoutouzu/**'
+      - '.github/workflows/jushoutouzu-pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: jushoutouzu-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Verify quickplay payload
+        shell: bash
+        run: |
+          test -f jushoutouzu/index.html
+          test -f jushoutouzu/src/boot.js
+          for i in 01 02 03 04 05 06; do
+            test -s "jushoutouzu/src/chunks/game.part${i}.txt"
+          done
+          ! test -e jushoutouzu/src/chunks/game.part07.txt
+          grep -q 'const PARTS=6' jushoutouzu/src/boot.js
+          grep -q 'PLAY NOW' jushoutouzu/index.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: jushoutouzu
+
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
