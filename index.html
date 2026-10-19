@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>崴孟星球跑酷 WeiMeng Planet Runner</title>
+    <title>崴孟星球跑酷</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&family=DotGothic16&display=swap');
 
         * { margin:0; padding:0; box-sizing:border-box; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 
@@ -226,11 +225,26 @@
         #plResult { background:rgba(8,14,26,.92); }
         #plResult h1 { font-size:30px; }
         #plResult .rline { font-size:18px; color:#fff; margin:6px 0; line-height:1.6; }
+
+        .ui-layer { overscroll-behavior:contain; touch-action:pan-y; }
+        .ui-layer::before,.ui-layer::after { content:''; flex:1 0 12px; }
+        .menu-inner { flex-shrink:0; }
+        .btn:focus-visible,.char-card:focus-visible { outline:3px solid #ffd166; outline-offset:5px; }
+        #plTouch { display:none; }
+        #pauseBtn { left:auto; right:14px; top:116px; transform:none; }
+        #hud { right:154px; }
+        #musicToggle { right:64px; }
+        #musicToggle.bgm-side { left:12px; top:auto; bottom:14px; transform:none; }
+        body:has(#hud:not(.hidden)) #pauseBtn { top:14px; }
+        #swipeHint { bottom:auto; top:14%; width:90%; font-size:13px; }
+        .mode-tag { max-width:740px; line-height:1.9; }
+        #coopSelect,#raceSelect,#keySetup { background:rgba(16,9,34,.97); }
+        @media(max-width:600px) { h1 {font-size:22px;} .ui-layer {padding:14px;} .instructions {font-size:12px;} #hudTop {font-size:10px;} }
     </style>
 </head>
 <body>
 
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas" aria-label="崴孟星球跑酷遊戲畫面"></canvas>
     <div class="crt-overlay"></div>
 
     <button id="musicToggle" onclick="toggleMusic()">BGM</button>
@@ -258,7 +272,7 @@
         <div class="menu-inner">
             <div class="planet"></div>
             <h1>崴孟星球跑酷</h1>
-            <p class="subtitle">▶ 從崴孟星球，一路跑到晴空塔</p>
+            <p class="subtitle">▶ 從崴孟星球，一路跑到晴空塔<br><span style="font-size:12px;color:#d4c4ef">默契冒險版 · 單檔離線遊玩</span></p>
 
             <button class="btn hidden" id="continueBtn" onclick="continueGame()" style="margin:0 auto 14px;display:block;">繼續冒險</button>
             <p id="newGameLabel" class="subtitle hidden" style="margin-top:0;font-size:13px;opacity:.7;">— 或選角重新開始 —</p>
@@ -317,7 +331,7 @@
             <button class="btn" onclick="resumeGame()">繼續遊戲 ▶</button>
         </div>
         <div class="menu-row">
-            <button class="btn btn-small btn-ghost" onclick="continueGame()">從紀錄點重來</button>
+            <button class="btn btn-small btn-ghost" id="pauseRestart" onclick="restartCurrent()">從紀錄點重來</button>
             <button class="btn btn-small btn-ghost" onclick="pauseToMenu()">回主選單</button>
         </div>
     </div>
@@ -348,7 +362,7 @@
     <!-- 雙人競速 設定 -->
     <div id="raceSelect" class="ui-layer hidden">
         <h1 style="font-size:24px;">雙人競速對決</h1>
-        <p class="mode-tag">分割畫面同場較勁，先抵達終點者勝。碰撞會彈開、踩頭使對方暈眩，沿途撿道具。</p>
+        <p class="mode-tag">3 秒倒數後公平起跑。地面穩走、高台捷徑、滑鏟通道；收集愛心為衝刺充能。技能加速，沿途道具可用護盾抵擋。</p>
         <p class="mode-tag" id="raceCtrlTag"></p>
         <div class="mode-tag">選擇賽道長度：</div>
         <div class="race-opts" id="raceOpts">
@@ -377,7 +391,7 @@
     <!-- 自訂按鍵 -->
     <div id="keySetup" class="ui-layer hidden">
         <h1 style="font-size:24px;">操作設定 / 自訂按鍵</h1>
-        <p class="mode-tag" id="keySetupHint">點任一按鍵格，再按下你想設定的鍵。技能：崴寶 = 護盾傳遞，孟寶 = 助攻。</p>
+        <p class="mode-tag" id="keySetupHint">點任一按鍵格，再按下你想設定的鍵。合作技能：崴寶 = 護盾共享，孟寶 = 跳躍助攻；靠近倒下的隊友並按住技能救援。Esc / P 暫停。</p>
         <div id="keyGrid" style="display:flex; gap:28px; justify-content:center; flex-wrap:wrap; margin:6px 0 14px;"></div>
         <div class="menu-row">
             <button class="btn btn-small btn-ghost" onclick="resetKeys()">重設為預設</button>
@@ -483,10 +497,15 @@
        音樂：依〈崴孟三百天禮物〉吉他和弦譜重建，改編日系浪漫 8-bit，10 段切片。
        ===================================================================== */
 
+    // Storage may be unavailable in private/file browsers. Keep a usable session save.
+    const storage = (()=>{ const memory=new Map(); return {
+        getItem(k){ if(memory.has(k))return memory.get(k);try { return window.localStorage.getItem(k); } catch { return null; } },
+        setItem(k,v){ memory.set(k,String(v)); try { window.localStorage.setItem(k,String(v)); } catch {} }
+    }; })();
     // ---------------- 音訊 ----------------
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
     let audioCtx;
-    function initAudio() { if (!audioCtx) audioCtx = new AudioCtx(); if (audioCtx.state === 'suspended') audioCtx.resume(); }
+    function initAudio() { if(!AudioCtx) return; try { if (!audioCtx) audioCtx = new AudioCtx(); if (audioCtx.state === 'suspended') audioCtx.resume().catch(()=>{}); } catch {} }
 
     const NOTE_MAP = { 'C':0,'C#':1,'Db':1,'D':2,'D#':3,'Eb':3,'E':4,'F':5,'F#':6,'Gb':6,'G':7,'G#':8,'Ab':8,'A':9,'A#':10,'Bb':10,'B':11 };
     function noteFreq(name) {
@@ -551,7 +570,7 @@
         buildSlice(['Am','Em','Am','D7','G'], [['A4',1],['C5',1],['E5',1],['A5',1],['G4',1],['B4',1],['E5',1],['G5',1],['A4',1],['C5',1],['E5',1],['C5',1],['D5',1],['F#5',1],['A5',1],['F#5',1],['G4',1],['B4',1],['D5',1],['G5',1]]),
         buildSlice(['C','Am','D7','G','C'], [['G4',1],['C5',1],['E5',1],['G5',1],['E5',1],['C5',1],['A4',1],['E5',1],['F#5',1],['D5',1],['A4',1],['D5',1],['D5',1],['B4',1],['G4',1],['D5',1],['C5',4]])
     ];
-    const bgm = { enabled:(localStorage.getItem('wm_music')!=='0'), on:false, bpm:92, curSlice:0, targetSlice:0, timer:null, melody:null, bass:null, arp:null };
+    const bgm = { enabled:(storage.getItem('wm_music')!=='0'), on:false, bpm:92, curSlice:0, targetSlice:0, timer:null, melody:null, bass:null, arp:null };
     function beatSec(b){ return b*60/bgm.bpm; }
     function startBGM() {
         if (!audioCtx || bgm.on || !bgm.enabled) return;
@@ -585,7 +604,7 @@
     }
     function toggleMusic() {
         initAudio(); bgm.enabled = !bgm.enabled;
-        localStorage.setItem('wm_music', bgm.enabled?'1':'0');
+        storage.setItem('wm_music', bgm.enabled?'1':'0');
         document.getElementById('musicToggle').classList.toggle('muted', !bgm.enabled);
         if (bgm.enabled) { if (gameState==='playing'||gameState==='ending') startBGM(); } else stopBGM();
     }
@@ -628,15 +647,15 @@
 
     // ---------------- 存檔 ----------------
     function loadSave() {
-        let u = []; try { u = JSON.parse(localStorage.getItem('wm_fragments')||'[]'); } catch(e){}
-        return { fragments:new Set(u), cleared:localStorage.getItem('wm_cleared')==='1',
-                 bestScore:parseInt(localStorage.getItem('wm_bestScore')||'0'),
-                 bestDist:parseInt(localStorage.getItem('wm_bestDist')||'0'),
-                 checkpoint:parseInt(localStorage.getItem('wm_checkpoint')||'0'),
-                 lastChar:localStorage.getItem('wm_lastChar')||'wei' };
+        let u = []; try { u = JSON.parse(storage.getItem('wm_fragments')||'[]'); } catch(e){}
+        return { fragments:new Set(Array.isArray(u)?u.filter(n=>Number.isInteger(n)&&n>=1&&n<=10):[]), cleared:storage.getItem('wm_cleared')==='1',
+                 bestScore:parseInt(storage.getItem('wm_bestScore')||'0'),
+                 bestDist:parseInt(storage.getItem('wm_bestDist')||'0'),
+                 checkpoint:Math.max(0,Math.min(9,parseInt(storage.getItem('wm_checkpoint')||'0')||0)),
+                 lastChar:['wei','meng','fusion'].includes(storage.getItem('wm_lastChar'))?storage.getItem('wm_lastChar'):'wei' };
     }
     let save = loadSave();
-    function saveFragments(){ localStorage.setItem('wm_fragments', JSON.stringify([...save.fragments])); }
+    function saveFragments(){ storage.setItem('wm_fragments', JSON.stringify([...save.fragments])); }
 
     // ---------------- 引擎 ----------------
     const canvas = document.getElementById('gameCanvas');
@@ -656,6 +675,21 @@
     let score=0, distance=0, frames=0, chapterIndex=0, runStartTime=0;
     let bossDone=false, codeDone=false, tongueDone=false, endingTriggered=false;
     let screenW, screenH, groundY, PIXEL_SCALE=isMobile?3:4;
+    let loopFn=null, loopFrame=0, loopLast=0, loopAcc=0;
+    function startLoop(fn, fresh=false){
+        if(loopFn!==fn||fresh){ loopFn=fn; loopLast=0; loopAcc=0; }
+        if(!loopFrame) loopFrame=requestAnimationFrame(fixedFrame);
+    }
+    function fixedFrame(t){
+        loopFrame=0;
+        const valid=()=>loopFn&&(loopFn===gameLoop?gameState==='playing':['coop','race'].includes(gameState));
+        if(!valid()){ loopFn=null; loopLast=0; return; }
+        loopAcc+=loopLast?Math.min(80,t-loopLast):1000/60; loopLast=t;
+        let n=0;
+        while(loopAcc>=1000/60-0.001&&n++<5&&valid()){ loopAcc-=1000/60; loopFn(); }
+        if(valid()&&!loopFrame) loopFrame=requestAnimationFrame(fixedFrame);
+    }
+    function clearInputs(){ Object.keys(keyState).forEach(k=>keyState[k]=false); if(player) player.slideHeld=false; }
     function curChapter(){ return CHAPTERS[chapterIndex]; }
 
     function resizeCanvas() {
@@ -671,7 +705,7 @@
     class Player {
         constructor(type) {
             this.type=type; this.w=14*PIXEL_SCALE; this.h=24*PIXEL_SCALE;
-            this.x=screenW*0.16; this.y=groundY-this.h; this.vy=0;
+            this.x=Math.min(screenW*0.16,120); this.y=groundY-this.h; this.vy=0;
             this.jumpForce=(type==='meng')?-16.5:(type==='fusion')?-17:-15.5;
             this.isGrounded=true; this.isSliding=false; this.slideTimer=0; this.slideHeld=false;
             this.invincibleTime=0; this.shield=(type==='wei'||type==='fusion')?1:0; this.runTick=0;
@@ -920,7 +954,7 @@
     function enterChapter(idx, popCard) {
         chapterIndex=idx; const ch=curChapter();
         chapterNameEl.textContent=`第${idx+1}章 ${ch.name}`; setBgmSlice(idx); showChapterBanner(ch);
-        if (!freeRun && !hardcore && idx>save.checkpoint) { save.checkpoint=idx; localStorage.setItem('wm_checkpoint', idx); }
+        if (!freeRun && !hardcore && idx>save.checkpoint) { save.checkpoint=idx; storage.setItem('wm_checkpoint', idx); }
         const fid=idx+1; if (!save.fragments.has(fid)) { save.fragments.add(fid); saveFragments(); }
         updateFragHud(); if (popCard) showFragment(fid);
     }
@@ -999,7 +1033,7 @@
         resumePlay();
     }
     function qteFail(){ qteActive=false; qteScreen.classList.add('hidden'); createFloatingText('再試一次…',screenW/2-50,screenH/2,'#ccc'); resumePlay(); }
-    function resumePlay(){ gameState='playing'; requestAnimationFrame(gameLoop); }
+    function resumePlay(){ gameState='playing'; startLoop(gameLoop); }
     function checkCollision(a,b){ return a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y; }
     // 較寬容的碰撞箱：鳥型只保留下半部 (跳得夠高即可安全通過)，地面障礙四周內縮
     function collBox(o){
@@ -1059,7 +1093,7 @@
         document.getElementById('musicToggle').classList.remove('bgm-side');
         document.getElementById('pauseScreen').classList.add('hidden'); document.getElementById('pauseBtn').classList.remove('hidden');
         if (isMobile) { if(player) player.slideHeld=false; document.getElementById('runTouch').classList.remove('hidden'); }
-        requestAnimationFrame(gameLoop);
+        startLoop(gameLoop);
     }
     function gameOver() {
         gameState='gameover'; sfx.hit(); stopBGM(); hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); recordStats();
@@ -1073,10 +1107,11 @@
         gameOverScreen.classList.remove('hidden');
     }
     function recordStats() {
-        if (score>save.bestScore) { save.bestScore=score; localStorage.setItem('wm_bestScore',score); }
-        if (Math.floor(distance)>save.bestDist) { save.bestDist=Math.floor(distance); localStorage.setItem('wm_bestDist',Math.floor(distance)); }
+        if (score>save.bestScore) { save.bestScore=score; storage.setItem('wm_bestScore',score); }
+        if (Math.floor(distance)>save.bestDist) { save.bestDist=Math.floor(distance); storage.setItem('wm_bestDist',Math.floor(distance)); }
     }
     function showMenu() {
+        clearInputs(); stopDiaryRead(); qteScreen.classList.add('hidden');
         gameOverScreen.classList.add('hidden'); galleryScreen.classList.add('hidden');
         endingScreen.classList.add('hidden'); fragmentScreen.classList.add('hidden');
         ['coopSelect','raceSelect','plResult','plTouch','weddingScreen','runTouch','levelSelect','keySetup','pauseScreen'].forEach(id=>document.getElementById(id).classList.add('hidden'));
@@ -1141,9 +1176,9 @@
         scoreDisplay.innerText=`${score}`;
         const d=document.getElementById('distDisplay'); if (d) d.innerText=`${Math.floor(distance)}m`;
         progressFill.style.width=(endless?((distance%1000)/1000*100):Math.min(100,distance/10000*100))+'%';
-        if (gameState==='playing') requestAnimationFrame(gameLoop);
+        if (gameState==='playing') startLoop(gameLoop);
     }
-    function startGame(c){ initAudio(); hardcore=false; endless=false; localStorage.setItem('wm_lastChar',c); save.lastChar=c; resetGame(c,false,0); }
+    function startGame(c){ initAudio(); hardcore=false; endless=false; storage.setItem('wm_lastChar',c); save.lastChar=c; resetGame(c,false,0); }
     function continueGame(){ save=loadSave(); hardcore=false; endless=false; if(save.checkpoint<=0){ startGame(save.lastChar||'wei'); return; } initAudio(); resetGame(save.lastChar||'wei', false, save.checkpoint); }
     function startFreeRun(){ if(!save.cleared) return; initAudio(); hardcore=false; endless=false; resetGame('wei',true); }
     // 通關後模式
@@ -1157,14 +1192,32 @@
         createFloatingText('一命挑戰！無存檔點，死亡即從頭', screenW*0.5-150, screenH*0.4, '#ff6b81'); }
     function startEndless(){ if(!save.cleared) return; initAudio(); hardcore=false; endless=true; resetGame(save.lastChar||'wei', false, 0);
         createFloatingText('♾️ 無盡模式！每關愈來愈快', screenW*0.5-130, screenH*0.4, '#7CFC9C'); }
-    function pauseGame(){ if(gameState!=='playing') return; gameState='paused';
-        document.getElementById('pauseInfo').innerHTML=`第${chapterIndex+1}章 ${curChapter().name}<br>里程 ${Math.floor(distance)}m　分數 ${score}`;
+    let pausedFrom='playing';
+    function pauseGame(){
+        if(!['playing','coop','race'].includes(gameState))return;
+        pausedFrom=gameState; clearInputs(); gameState='paused';
+        document.getElementById('pauseInfo').textContent=pausedFrom==='playing'?`第${chapterIndex+1}章 · ${Math.floor(distance)}m`:(pausedFrom==='coop'?`雙人合作 · 第${PL.level.theme+1}關 · 檢查點可重來`:'雙人競速 · 計時已暫停');
+        document.getElementById('pauseRestart').textContent=pausedFrom==='race'?'重新比賽':'從紀錄點重來';
         document.getElementById('pauseScreen').classList.remove('hidden');
-        document.getElementById('pauseBtn').classList.add('hidden'); }
-    function resumeGame(){ if(gameState!=='paused') return; gameState='playing';
+        document.getElementById('pauseBtn').classList.add('hidden');
+    }
+    function resumeGame(){
+        if(gameState!=='paused')return;
+        clearInputs(); gameState=pausedFrom;
         document.getElementById('pauseScreen').classList.add('hidden');
         document.getElementById('pauseBtn').classList.remove('hidden');
-        requestAnimationFrame(gameLoop); }
+        startLoop(gameState==='playing'?gameLoop:plLoop,true);
+    }
+    function restartCurrent(){
+        document.getElementById('pauseScreen').classList.add('hidden');
+        if(pausedFrom==='race') startRace();
+        else if(pausedFrom==='coop'){
+            for(const ch of PL.chars){ ch.resetFull(); ch.spawn={...ch.safe}; }
+            plMsg('從雙人檢查點重新出發！'); gameState='coop'; clearInputs();
+            document.getElementById('pauseBtn').classList.remove('hidden'); startLoop(plLoop,true);
+        } else if(endless) startEndless(); else if(hardcore) startHardcore(); else continueGame();
+    }
+
     function pauseToMenu(){ document.getElementById('pauseScreen').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); showMenu(); }
 
     // ---------------- 結局 ----------------
@@ -1172,7 +1225,7 @@
     let endStep=0, lastEndAdvance=0;
     function triggerEnding() {
         endingTriggered=true; gameState='ending'; stopBGM(); setBgmSlice(9); startBGM(); recordStats();
-        if (!save.cleared) { save.cleared=true; localStorage.setItem('wm_cleared','1'); }
+        if (!save.cleared) { save.cleared=true; storage.setItem('wm_cleared','1'); }
         hud.classList.add('hidden'); document.getElementById('runTouch').classList.add('hidden'); document.getElementById('pauseBtn').classList.add('hidden'); buildSakura(); drawTower(); endStep=0;
         document.getElementById('endRewards').classList.add('hidden');
         document.getElementById('endTapHint').classList.remove('hidden');
@@ -1304,8 +1357,8 @@
     const P2DEF={left:'ArrowLeft',right:'ArrowRight',jump:'ArrowUp',slide:'ArrowDown',skill:'ShiftRight',item:'Slash'};
     const P1CTRL={...P1DEF}, P2CTRL={...P2DEF};   // 物件引用固定，重綁時就地修改屬性
     const KEY_ACTIONS=[['left','左移'],['right','右移'],['jump','跳'],['slide','滑/蹲'],['skill','技能'],['item','道具']];
-    function loadKeys(){ try{ const a=JSON.parse(localStorage.getItem('wm_keysP1')||'null'); if(a)Object.assign(P1CTRL,a); const b=JSON.parse(localStorage.getItem('wm_keysP2')||'null'); if(b)Object.assign(P2CTRL,b);}catch(e){} }
-    function saveKeys(){ localStorage.setItem('wm_keysP1',JSON.stringify(P1CTRL)); localStorage.setItem('wm_keysP2',JSON.stringify(P2CTRL)); }
+    function loadKeys(){ try{ const a=JSON.parse(storage.getItem('wm_keysP1')||'null'); if(a)Object.assign(P1CTRL,a); const b=JSON.parse(storage.getItem('wm_keysP2')||'null'); if(b)Object.assign(P2CTRL,b);}catch(e){} }
+    function saveKeys(){ storage.setItem('wm_keysP1',JSON.stringify(P1CTRL)); storage.setItem('wm_keysP2',JSON.stringify(P2CTRL)); }
     function keyLabel(code){ if(!code) return '—';
         if(code.startsWith('Key')) return code.slice(3);
         if(code.startsWith('Digit')) return code.slice(5);
@@ -1314,128 +1367,159 @@
     loadKeys();
     const RACE_ITEMS=['cake','bolt','shield','note','troll'];
     const ITEM_NAME={cake:'草莓蛋糕 加速',bolt:'閃電 對方減速',shield:'護盾',note:'音符 操作反轉',troll:'酸民方塊'};
-    const PL={ mode:'coop', level:null, chars:[], raceDist:5000, startTime:0, dashCd:0, message:'', msgT:0, tutT:0, trollBlocks:[], tick:0, skin:false, flame:false, weddingMode:false, sudden:false };
+    const PL={ mode:'coop', level:null, chars:[], raceDist:5000, startTime:0, dashCd:0, message:'', msgT:0, tutT:0, trollBlocks:[], tick:0, skin:false, flame:false, weddingMode:false, sudden:false, fx:[],labels:[],energy:35,hearts:0,hits:0,rescues:0,elapsed:0,countdown:0,cam:null,split:false };
 
     const clamp=(v,a,b)=>v<a?a:(v>b?b:v);
     const aabb=(a,b)=>a.x<b.x+b.w && a.x+a.w>b.x && a.y<b.y+b.h && a.y+a.h>b.y;
     function plMsg(t,dur){ PL.message=t; PL.msgT=dur||120; }
 
     // localStorage 解鎖
-    function plGetCoopMax(){ return parseInt(localStorage.getItem('wm_coopMax')||'0',10); }
-    function plSetCoopMax(v){ localStorage.setItem('wm_coopMax', String(v)); }
-    function plGetRaceWins(){ return parseInt(localStorage.getItem('wm_raceWins')||'0',10); }
-    function plSetRaceWins(v){ localStorage.setItem('wm_raceWins', String(v)); }
+    function plGetCoopMax(){ return clamp(parseInt(storage.getItem('wm_coopMax')||'0',10)||0,0,10); }
+    function plSetCoopMax(v){ storage.setItem('wm_coopMax', String(v)); }
+    function plGetRaceWins(){ return Math.max(0,parseInt(storage.getItem('wm_raceWins')||'0',10)||0); }
+    function plSetRaceWins(v){ storage.setItem('wm_raceWins', String(v)); }
 
-    // ---------- 像素角色（世界座標、可左右翻面） ----------
-    function drawCharSprite(g,type,x,y,w,h,facing,sliding,dim,skin){
-        g.save(); g.translate(x,y);
-        if(facing<0){ g.translate(w,0); g.scale(-1,1); }
-        const u=Math.min(w/13,h/24), ox=(w-13*u)/2, oy=h-24*u+(sliding?7*u:0);
-        g.translate(ox,oy); if(dim) g.globalAlpha=0.5;
-        const P=u, px=(a,b,ww,hh,c)=>{ g.fillStyle=c; g.fillRect(a*P,b*P,ww*P,hh*P); };
-        const HAIR='#101018',SKIN='#f4c39a',SHIRT='#fafaff',SHIRT_SH='#d7d7e4',SLEEVE='#16161f',JEANS='#33508c',SHOE='#cfd3da',SOLE='#fff';
-        px(0,0,9,2,HAIR); px(0,0,2,6,HAIR); px(2,0,6,1,HAIR); px(6,1,3,1,HAIR);
-        px(2,2,7,5,SKIN); px(9,3,1,2,SKIN); px(3,6,3,3,SKIN);
-        if(type==='wei'){ px(6,3,3,2,'#fff'); g.fillStyle='#1c1c22'; g.fillRect(6*P,3*P,3*P,1*P); g.fillRect(8*P,3*P,1*P,2*P); g.fillStyle='#111'; g.fillRect(7*P,3*P,1*P,1*P); }
-        else { g.fillStyle='#111'; g.fillRect(7*P,3*P,1*P,2*P); }
-        px(4,9,7,8,SHIRT); px(4,15,7,2,SHIRT_SH); px(4,9,1,4,SLEEVE); px(10,9,1,4,SLEEVE);
-        px(4,10,2,3,SLEEVE); px(9,10,2,3,SLEEVE); px(4,13,2,2,SKIN); px(9,13,2,2,SKIN);
-        px(5,17,2,4,JEANS); px(8,17,2,4,JEANS); px(4,21,4,2,SHOE); px(8,21,4,2,SHOE); px(4,23,4,1,SOLE); px(8,23,4,1,SOLE);
-        if(skin){
-            if(type==='wei'){ px(0,0,9,2,'#f5f1ff'); px(0,0,2,5,'#f5f1ff'); px(2,0,6,1,'#f5f1ff'); px(1,1,2,2,'#ff9ec4'); // 頭紗+花
-                px(4,17,7,4,'#ffffff'); px(4,20,7,1,'#e9e0ff'); px(4,9,7,2,'#ffffff'); }            // 婚紗裙襬
-            else { px(4,9,7,8,'#2a2a3a'); px(4,15,7,2,'#1c1c28'); px(6,9,3,6,'#fafaff'); g.fillStyle='#b1334e'; g.fillRect(6*P,10*P,3*P,2*P); } // 西裝+領結
+
+    // ---------- Animated characters. y always represents the standing body's top. ----------
+    function drawCharSprite(g,type,x,y,w,h,facing,sliding,dim,skin,pose={}){
+        g.save(); g.translate(x+w/2,y+h); g.scale(facing<0?-1:1,1);
+        if(pose.down){ g.rotate(-Math.PI/2); g.translate(0,-w/2); }
+        const u=w/14, phase=pose.phase||0, moving=pose.moving, air=pose.air;
+        const squash=pose.land?1-Math.min(pose.land,8)*.025:1;
+        g.scale(1/squash,squash); g.translate(-7*u,-(sliding?13:24)*u);
+        if(!air&&!sliding&&moving) g.translate(0,-Math.abs(Math.sin(phase))*1.2*u);
+        if(dim) g.globalAlpha*=.45;
+        const px=(a,b,ww,hh,c)=>{g.fillStyle=c;g.fillRect(Math.round(a*u),Math.round(b*u),Math.ceil(ww*u),Math.ceil(hh*u));};
+        const shirt=skin?(type==='wei'?'#fff8ff':'#303347'):(type==='wei'?'#e8f4ff':'#fff0d4');
+        const sleeve=type==='wei'?'#254b83':'#ad5528', skinC='#f4c39a', jeans='#33508c';
+        const head=(ox,oy)=>{
+            px(ox,oy,9,2,'#11131e');px(ox,oy+1,2,6,'#11131e');
+            px(ox+2,oy+2,7,5,skinC);px(ox+8,oy+4,2,2,skinC);px(ox+4,oy+7,3,2,skinC);
+            if(type==='wei'){px(ox+5,oy+3,4,2,'#f5fcff');px(ox+5,oy+3,4,.6,'#202634');px(ox+7,oy+3,1,1,'#202634');}
+            else {px(ox+7,oy+3,1,2,'#15182a');px(ox+2,oy+1,2,1,'#ffbd4f');}
+            if(skin&&type==='wei'){px(ox-1,oy,3,11,'#eee8ff');px(ox,oy,2,2,'#ff9ec4');}
+        };
+        const limb=(x,y,dx,dy,c)=>{ px(x,y,2,3,c);px(x+dx*.5,y+2,2,3,c);px(x+dx,y+4-dy,3,2,c); };
+        if(sliding){
+            px(3,7,8,4,shirt);px(8,10,6,2,jeans);px(12,11,3,2,'#e2e9f3');
+            px(2,9,2,2,skinC);head(3,0);
+        } else {
+            const swing=air?2:(moving?Math.sin(phase)*3.3:0), lift=air?3:Math.max(0,Math.cos(phase)*2);
+            limb(8,17,-swing,lift,'#24365c');px(8-swing,22-lift,4,2,'#97abc8');
+            limb(9,10,swing,air?3:0,sleeve);px(9+swing,15-(air?3:0),2,2,skinC);
+            px(4,9,7,8,shirt);px(4,15,7,2,skin?'#c9bedc':'#bdc9d9');
+            px(6,12,1,1,sleeve);px(9,12,1,1,sleeve);px(7,14,2,1,sleeve);head(2,0);
+            limb(5,17,swing,air?4:Math.max(0,-Math.cos(phase)*2),jeans);
+            px(5+swing,air?20:22-Math.max(0,-Math.cos(phase)*2),4,2,'#e7edf8');
+            limb(4,10,-swing,air?3:0,sleeve);px(4-swing,15-(air?3:0),2,2,skinC);
+            if(skin&&type==='wei'){px(3,17,9,4,'#fff8ff');px(2,20,11,2,'#e2d8f5');}
+            if(skin&&type==='meng')px(6,10,3,1,'#f27697');
         }
         g.restore();
     }
-
-    // ---------- PlatChar ----------
+    function plBurst(x,y,color,n=8){
+        for(let i=0;i<n&&PL.fx.length<180;i++)PL.fx.push({x,y,vx:(Math.random()-.5)*4,vy:-Math.random()*3-1,life:25,max:25,color});
+    }
+    function plFloat(x,y,text,color='#ffd166'){ PL.labels.push({x,y,text,color,life:65}); if(PL.labels.length>18)PL.labels.shift(); }
+    function plRevive(ch){ ch.isDown=false;ch.hp=1;ch.invT=150;ch.revive=0;ch.vx=ch.vy=0;plBurst(ch.x,ch.y,'#7cfcac',20);sfx.eat();plMsg('救援成功！下一個檢查點可恢復生命');PL.rescues++; }
     class PlatChar {
-        constructor(type,controls){ this.type=type; this.controls=controls; this.w=26; this.fullH=42; this.h=42; this.spawn={x:0,y:0}; this.score=0; }
+        constructor(type,controls){ this.type=type;this.controls=controls;this.w=30;this.fullH=52;this.h=52;this.spawn={x:0,y:0};this.score=0; }
         resetFull(){
-            this.x=this.spawn.x; this.y=this.spawn.y; this.h=this.fullH; this.vx=0; this.vy=0; this.facing=1;
-            this.onGround=false; this.airJumps=0; this.sliding=false; this.invT=0; this.isDown=false; this.stun=0;
-            this.hp=3; this.shield=this.type==='wei'?1:0; this.shieldT=0; this.dashT=0; this.skillCd=0;
-            this.reverseT=0; this.slowT=0; this.boostT=0; this.standingOn=null; this.item=null;
-            this.safe={x:this.spawn.x,y:this.spawn.y};
+            Object.assign(this,{x:this.spawn.x,y:this.spawn.y,h:this.fullH,vx:0,vy:0,facing:1,onGround:false,airJumps:0,sliding:false,invT:0,isDown:false,stun:0,hp:3,shield:this.type==='wei'?1:0,shieldT:0,dashT:0,skillCd:0,reverseT:0,slowT:0,boostT:0,standingOn:null,item:null,coyote:0,jumpBuffer:0,runPhase:0,landT:0,revive:0,shieldCharge:0,skillIntent:-999,contactCd:0,charge:0});
+            this.safe={...this.spawn};
         }
-        hb(){ return {x:this.x,y:this.y+(this.fullH-this.h),w:this.w,h:this.h}; }
-        respawnHit(){ this.x=this.safe.x; this.y=this.safe.y; this.vx=0; this.vy=0; this.invT=110; this.h=this.fullH; }
-        jump(){
-            if(this.isDown||this.stun>0) return;
-            if(this.onGround){ this.vy=JUMP_V; this.onGround=false; this.airJumps=(this.type==='meng')?1:0; sfx.jump(); }
-            else if(this.type==='meng'&&this.airJumps>0){ this.vy=JUMP_V*0.9; this.airJumps--; sfx.jump(); }
+        hb(){return{x:this.x+3,y:this.y+this.fullH-this.h,w:this.w-6,h:this.h};}
+        jump(){if(!this.isDown&&this.stun<=0)this.jumpBuffer=8;}
+        performJump(){
+            if(!this.jumpBuffer||this.isDown||this.stun>0)return;
+            if(this.onGround||this.coyote>0){this.vy=JUMP_V;this.onGround=false;this.coyote=0;}
+            else if(this.type==='meng'&&this.airJumps>0){this.vy=JUMP_V*.9;this.airJumps--;}
+            else return;
+            this.jumpBuffer=0;this.h=this.fullH;this.sliding=false;this.standingOn=null;
+            plBurst(this.x+15,this.y+this.fullH,this.type==='wei'?'#96caff':'#ffd166',7);sfx.jump();
         }
-        damage(fell){
-            if(this.invT>0||this.dashT>0||this.isDown) return;
-            if(PL.mode==='race'){ this.stun=18; this.vy=-8; this.vx=-this.facing*6; sfx.hit(); return; }
-            if(this.shield>0&&!fell){ this.shield--; this.invT=70; sfx.shieldBreak(); return; }
-            this.hp--; sfx.hit();
-            if(this.hp<=0){ this.hp=0; this.isDown=true; this.vx=0; } else this.respawnHit();
+        respawnHit(){this.x=this.safe.x;this.y=this.safe.y;this.vx=0;this.vy=0;this.h=this.fullH;this.sliding=false;this.standingOn=null;this.invT=100;}
+        damage(fell=false){
+            if(this.isDown)return;
+            if(!fell&&(this.invT>0||this.dashT>0))return;
+            plBurst(this.x+15,this.y+26,'#ff678e',12);PL.hits++;PL.shakeT=8;
+            if(PL.mode==='race'){
+                this.invT=85;this.stun=16;this.vy=-7;this.vx=-this.facing*4;this.charge=Math.max(0,this.charge-18);
+                if(fell)this.respawnHit();sfx.hit();return;
+            }
+            if(this.shield>0&&!fell){this.shield=0;this.shieldT=0;this.invT=90;plFloat(this.x,this.y-10,'護盾抵擋','#8cd9ff');sfx.shieldBreak();return;}
+            this.hp--;sfx.hit();this.respawnHit();
+            if(this.hp<=0){this.hp=0;this.isDown=true;this.invT=0;plMsg('靠近倒下的隊友，按住技能鍵救援！',180);}
         }
         moveX(dx,level){
             this.x+=dx;
-            for(const p of level.plats){ if(p.oneway) continue; if(aabb(this.hb(),p)){ if(dx>0)this.x=p.x-this.w; else if(dx<0)this.x=p.x+p.w; this.vx=0; } }
-            if(this.x<0){this.x=0;this.vx=0;} if(this.x+this.w>level.world.w){this.x=level.world.w-this.w;this.vx=0;}
+            for(const p of level.plats){if(p.oneway)continue;const b=this.hb();if(aabb(b,p)){if(dx>0)this.x=p.x-(this.w-3);else if(dx<0)this.x=p.x+p.w-3;this.vx=0;}}
+            this.x=clamp(this.x,0,level.world.w-this.w);
         }
         moveY(dy,level){
-            this.y+=dy; this.onGround=false;
+            const prevBottom=this.y+this.fullH;this.y+=dy;this.onGround=false;this.standingOn=null;
             for(const p of level.plats){
-                const box=this.hb();
-                if(aabb(box,p)){
-                    if(dy>0){
-                        if(p.oneway && (box.y+box.h-dy)>p.y+8) continue;
-                        this.y=p.y-this.fullH;
-                        if(p.bounce){ this.vy=JUMP_V*1.55; sfx.jump(); } else { this.vy=0; this.onGround=true; this.airJumps=(this.type==='meng')?1:0; if(p.carry) this.standingOn=p; }
-                    } else if(dy<0){ if(p.oneway) continue; this.y=p.y+p.h-(this.fullH-this.h); this.vy=0; }
-                }
+                const b=this.hb();if(!aabb(b,p))continue;
+                if(dy>=0&&prevBottom<=p.y+Math.max(8,Math.abs(p.dy||0)+2)){
+                    this.y=p.y-this.fullH;
+                    if(p.bounce){this.vy=JUMP_V*1.5;this.airJumps=this.type==='meng'?1:0;plBurst(this.x+15,p.y,'#8dffe1');sfx.jump();}
+                    else{this.vy=0;this.onGround=true;this.airJumps=this.type==='meng'?1:0;this.standingOn=p.carry||null;}
+                }else if(!p.oneway&&dy<0){this.y=p.y+p.h-(this.fullH-this.h);this.vy=0;}
             }
-            if(PL.mode==='coop'){
-                for(const o of PL.chars){ if(o===this||o.isDown) continue; const box=this.hb();
-                    if(dy>0 && aabb(box,{x:o.x,y:o.y,w:o.w,h:12}) && (box.y+box.h-dy)<=o.y+10){ this.y=o.y-this.fullH; this.vy=0; this.onGround=true; this.airJumps=(this.type==='meng')?1:0; }
-                }
-            }
+            if(PL.mode==='coop'&&dy>=0){for(const o of PL.chars){if(o===this||o.isDown)continue;if(aabb(this.hb(),{x:o.x+3,y:o.y,w:o.w-6,h:10})&&prevBottom<=o.y+8){this.y=o.y-this.fullH;this.vy=0;this.onGround=true;this.airJumps=this.type==='meng'?1:0;}}}
         }
         update(level){
-            if(this.isDown){ this.vy+=GRAV; this.moveY(this.vy,level); return; }
-            if(this.stun>0) this.stun--;
-            const bottom=this.y+this.h;
-            const wantSlide=keyState[this.controls.slide]&&this.onGround&&this.stun<=0;
-            this.h=wantSlide?24:this.fullH; this.y=bottom-this.h; this.sliding=wantSlide;
-            let L=keyState[this.controls.left], R=keyState[this.controls.right];
-            if(this.reverseT>0){ const t=L; L=R; R=t; }
-            let tgt=0; if(this.stun<=0){ if(L)tgt=-1; if(R)tgt=1; }
-            const sp=MOVE_SPEED*(this.boostT>0?1.6:1)*(this.slowT>0?0.5:1)*(this.dashT>0?2.2:1);
-            if(tgt!==0){ this.vx+=(tgt*sp-this.vx)*0.3; this.facing=tgt; } else this.vx*=FRICTION;
-            this.vy+=GRAV; if(this.vy>MAXFALL) this.vy=MAXFALL;
-            if(this.standingOn&&this.standingOn.dx!==undefined){ this.x+=this.standingOn.dx; this.y+=this.standingOn.dy; }
-            this.standingOn=null;
-            this.moveX(this.vx,level); this.moveY(this.vy,level);
-            if(this.invT>0)this.invT--; if(this.skillCd>0)this.skillCd--; if(this.dashT>0)this.dashT--;
-            if(this.shieldT>0){ this.shieldT--; if(this.shieldT===0&&this.type!=='wei') this.shield=0; }
-            if(this.reverseT>0)this.reverseT--; if(this.slowT>0)this.slowT--; if(this.boostT>0)this.boostT--;
-            if(this.onGround&&this.invT<=0) this.safe={x:this.x,y:this.y-(this.fullH-this.h)};
-            if(PL.mode==='race'&&level.boostZone&&this.x>level.boostZone.x) this.boostT=Math.max(this.boostT,6);
-            for(const hz of level.hazards){ if(aabb(this.hb(),hz)){ if(hz.needShield&&(this.shield>0||this.shieldT>0||this.invT>0)) continue; this.damage(false); } }
-            if(this.y>level.world.h+160) this.damage(true);
+            if(this.isDown){this.revive=Math.max(0,this.revive-.2);return;}
+            for(const k of ['stun','invT','skillCd','dashT','reverseT','slowT','boostT','landT','contactCd'])if(this[k]>0)this[k]--;
+            if(this.shieldT>0&&--this.shieldT===0)this.shield=0;
+            if(PL.mode==='coop'&&this.type==='wei'&&this.shield===0){if(++this.shieldCharge>=540){this.shield=1;this.shieldCharge=0;plFloat(this.x,this.y-14,'護盾充能完成','#8cd9ff');}}else this.shieldCharge=0;
+            const wasGround=this.onGround;
+            this.coyote=this.onGround?7:Math.max(0,this.coyote-1);
+            const wantSlide=!!keyState[this.controls.slide]&&this.onGround&&this.stun<=0;
+            if(wantSlide&&!this.sliding){this.vx+=this.facing*2.8;sfx.duck();}
+            this.sliding=wantSlide;this.h=wantSlide?27:this.fullH;
+            if(!wantSlide&&level.plats.some(p=>!p.oneway&&aabb(this.hb(),p))){this.h=27;this.sliding=true;}
+            if(!this.sliding)this.performJump();
+            if(this.jumpBuffer>0)this.jumpBuffer--;
+            let l=keyState[this.controls.left],r=keyState[this.controls.right];if(this.reverseT>0)[l,r]=[r,l];
+            let dir=this.stun>0?0:((r?1:0)-(l?1:0));if(this.dashT>0)dir=this.dashDir||this.facing;
+            const sp=MOVE_SPEED*(this.boostT>0?1.45:1)*(this.slowT>0?.58:1)*(this.dashT>0?1.8:1)*(this.sliding?1.12:1);
+            if(dir){this.vx+=(dir*sp-this.vx)*(this.onGround?.27:.17);this.facing=dir;}else this.vx*=this.onGround?FRICTION:.96;
+            if(Math.abs(this.vx)<.05)this.vx=0;
+            if(this.standingOn){this.moveX(this.standingOn.dx||0,level);this.y+=this.standingOn.dy||0;}
+            this.vy=Math.min(MAXFALL,this.vy+GRAV);this.moveX(this.vx,level);this.moveY(this.vy,level);
+            if(this.onGround&&!wasGround){this.landT=8;plBurst(this.x+15,this.y+this.fullH,'#b8add4',5);}
+            this.runPhase+=Math.abs(this.vx)*.12;
+            if(this.onGround&&!this.invT&&PL.mode==='race')this.safe={x:this.x,y:this.y};
+            if(PL.mode==='race'&&level.boostZone&&this.x>level.boostZone.x&&this.x<level.boostZone.x+level.boostZone.w)this.boostT=Math.max(this.boostT,6);
+            for(const hz of level.hazards)if(aabb(this.hb(),hz)){if(hz.needShield&&(this.shield>0||this.invT>0))continue;this.damage();}
+            if(this.y>level.world.h+100)this.damage(true);
+            if(PL.tick%7===0&&this.onGround&&Math.abs(this.vx)>2)plBurst(this.x+15,this.y+this.fullH,this.boostT?'#ffd166':'#b0a0c1',1);
         }
         draw(g){
-            const box=this.hb(), flash=this.invT>0&&Math.floor(PL.tick/4)%2===0, skin=PL.skin||PL.weddingMode;
-            if(PL.flame&&(this.boostT>0||this.dashT>0)){ const fy=box.y+box.h*0.5, fc=['#ffd24a','#ff7a1a','#ff3b1a']; for(let i=0;i<3;i++){ g.fillStyle=fc[i]; const fx=this.facing>0?box.x-8-i*7:box.x+box.w+i*7; g.fillRect(fx,fy+i*3,9,7-i*2); } }
-            if(this.dashT>0){ g.globalAlpha=0.3; drawCharSprite(g,this.type,box.x-this.facing*10,box.y,box.w,box.h,this.facing,this.sliding,false,skin); g.globalAlpha=1; }
-            drawCharSprite(g,this.type,box.x,box.y,box.w,box.h,this.facing,this.sliding,flash,skin);
-            if(this.shield>0||this.shieldT>0){ g.strokeStyle='rgba(91,155,246,.85)'; g.lineWidth=3; g.beginPath(); g.arc(box.x+box.w/2,box.y+box.h/2,box.w,0,Math.PI*2); g.stroke(); }
-            if(this.isDown){ g.fillStyle='#ff5a7a'; g.font='14px DotGothic16'; g.textAlign='center'; g.fillText('救我！',box.x+box.w/2,box.y-8); }
+            const color=this.type==='wei'?'#8dc4ff':'#ffd166';
+            g.save();
+            g.fillStyle='rgba(8,5,22,.28)';g.beginPath();g.ellipse(this.x+15,this.y+this.fullH+3,19,4,0,0,Math.PI*2);g.fill();
+            const b=this.hb(), pose={phase:this.runPhase,moving:Math.abs(this.vx)>.5,air:!this.onGround,land:this.landT,down:this.isDown};
+            if(this.boostT||this.dashT){g.globalAlpha=.2;drawCharSprite(g,this.type,this.x-this.facing*15,this.y,this.w,this.fullH,this.facing,this.sliding,false,PL.skin,pose);g.globalAlpha=1;}
+            drawCharSprite(g,this.type,this.x,this.sliding?b.y:this.y,this.w,this.h,this.facing,this.sliding,this.invT>0&&PL.tick%8<4,PL.skin||PL.weddingMode,pose);
+            if(this.shield>0){g.strokeStyle='#81d5ff';g.lineWidth=2;g.beginPath();g.ellipse(this.x+15,b.y+b.h/2,24,b.h/2+7,0,0,Math.PI*2);g.stroke();}
+            g.textAlign='center';g.font='bold 11px sans-serif';g.fillStyle=color;g.fillText(this.type==='wei'?'P1':'P2',this.x+15,b.y-12);
+            if(this.isDown){g.fillStyle='#ff8fa9';g.fillText('按住技能救援',this.x+15,this.y-28);g.fillStyle='#34293f';g.fillRect(this.x-8,this.y-20,46,4);g.fillStyle='#8bffcb';g.fillRect(this.x-8,this.y-20,46*this.revive/50,4);}
+            if(this.reverseT||this.slowT){g.fillStyle='#ffacdf';g.fillText(this.reverseT?'反向！':'緩速',this.x+15,b.y-27);}
+            g.restore();
         }
     }
+
 
     // ---------- 機關 ----------
     function MovingPlatform(o){ return { x:o.x,y:o.y,w:o.w,h:o.h||18,_ox:o.x,_oy:o.y,ax:o.ax||0,ay:o.ay||0,range:o.range||100,speed:o.speed||1.2,phase:o.phase||0,dx:0,dy:0,
         update(){ const px=this.x,py=this.y; this.phase+=this.speed*0.02; const off=Math.sin(this.phase)*this.range; this.x=this._ox+(this.ax?off:0); this.y=this._oy+(this.ay?off:0); this.dx=this.x-px; this.dy=this.y-py; },
-        solidRect(){ return {x:this.x,y:this.y,w:this.w,h:this.h,carry:true,dx:this.dx,dy:this.dy}; },
+        solidRect(){ return {x:this.x,y:this.y,w:this.w,h:this.h,carry:this,dx:this.dx,dy:this.dy,oneway:true}; },
         draw(g){ drawPlat(g,this,'#caa15a','#7a5e2a'); } }; }
     function Bounce(o){ return { x:o.x,y:o.y,w:o.w||60,h:o.h||12,
-        solidRect(){ return {x:this.x,y:this.y,w:this.w,h:this.h,bounce:true}; },
+        update(){for(const ch of PL.chars)if(!ch.isDown&&ch.onGround&&ch.x+ch.w>this.x&&ch.x<this.x+this.w&&Math.abs(ch.y+ch.fullH-(this.y+this.h))<18){ch.vy=JUMP_V*1.5;ch.onGround=false;ch.coyote=0;plBurst(ch.x+15,this.y,'#8dffe1');sfx.jump();}},
+        solidRect(){ return {x:this.x,y:this.y,w:this.w,h:this.h,bounce:true,oneway:true}; },
         draw(g){ g.fillStyle='#3bd1a0'; g.fillRect(this.x,this.y,this.w,this.h); g.fillStyle='#1f8f6b'; g.fillRect(this.x,this.y+this.h-3,this.w,3); for(let i=0;i<this.w;i+=12){ g.fillStyle='#aef7e3'; g.fillRect(this.x+i+2,this.y+2,6,2);} } }; }
     function Switch(o){ return { x:o.x,y:o.y,w:o.w||110,h:14,targetId:o.target,need:o.need||1,latch:o.latch!==false,active:false,
         update(level){ let c=0; for(const ch of PL.chars){ if(ch.isDown)continue; if(aabb(ch.hb(),{x:this.x,y:this.y-10,w:this.w,h:this.h+14})) c++; } const on=c>=this.need; if(this.latch){ if(on)this.active=true; } else this.active=on; const t=level.byId[this.targetId]; if(t)t.active=this.active; },
@@ -1466,12 +1550,13 @@
             }
         },
         draw(g){
-            const body=this.state==='stunned'?'#9a9ab0':'#7a3b8f', dark=this.state==='stunned'?'#5c5c70':'#2a112f';
+            const body=this.state==='stunned'?'#9a9ab0':this.state==='charge'?'#d24f74':'#7a3b8f', dark=this.state==='stunned'?'#5c5c70':'#2a112f';
             g.fillStyle=dark; g.fillRect(this.x-4,this.y+this.h-10,this.w+8,10);
             g.fillStyle=body; g.fillRect(this.x,this.y,this.w,this.h); g.fillStyle=dark; g.fillRect(this.x,this.y,this.w,10);
             g.fillStyle=this.state==='stunned'?'#ffd24a':'#fff'; g.fillRect(this.x+14,this.y+26,14,12); g.fillRect(this.x+this.w-28,this.y+26,14,12);
             g.fillStyle='#111'; g.fillRect(this.x+19,this.y+30,6,6); g.fillRect(this.x+this.w-23,this.y+30,6,6);
             g.fillStyle='#400'; g.fillRect(this.x,this.y-14,this.w,7); g.fillStyle='#ff4a6a'; g.fillRect(this.x,this.y-14,this.w*Math.max(0,this.hp)/3,7);
+            if(this.state==='idle'&&this.timer<42){g.fillStyle='#ffac8e';g.font='bold 14px sans-serif';g.textAlign='center';g.fillText('⚠ 即將衝刺！',this.x+this.w/2,this.y-30);g.strokeStyle='rgba(255,110,100,.7)';g.lineWidth=3;g.beginPath();g.moveTo(this.x+this.w/2,this.y+this.h+4);g.lineTo((this.target?.x||this.x)+15,this.y+this.h+4);g.stroke();}
             if(this.state==='stunned'){ g.fillStyle='#ffd24a'; g.font='12px DotGothic16'; g.textAlign='center'; g.fillText('踩我！',this.x+this.w/2,this.y-18); }
         }
     }; }
@@ -1496,194 +1581,254 @@
         plat(820,GY-120,150); plat(620,GY-240,150); plat(840,GY-360,150); plat(620,GY-480,150);
         coin(880,GY-160); coin(680,GY-280); coin(900,GY-400); coin(680,GY-520);
         // 頂端 Boss 競技場
-        solid(800,GY-560,1140,28);
+        statics.push({x:760,y:GY-560,w:1180,h:28,oneway:true});
         const boss=DualBoss({x:1260,y:GY-560-88,minX:830,maxX:1800});
         // 晴空塔頂終點台（打倒 Boss 後前往）
         solid(2080,GY-560,520,28); coin(2180,GY-600); coin(2240,GY-600); coin(2300,GY-600);
         const goal={x:2480,y:GY-560-92,w:54,h:92};
         return { theme:9, world:{w:W,h:H}, gy:GY, statics, hazards, coins, mechs, byId, goal, drops:[], boss, bossDefeated:false, finale:true, p1:{x:80,y:GY-60}, p2:{x:160,y:GY-60} };
     }
+
+    const COOP_TASKS=['並肩熱身 · 升降浮島','彈跳花園 · 一起登高','雙人開關 · 等隊友再出發','機關吊橋 · 啟動安全通路','護盾試煉 · 共享保護','星際浮島 · 掌握移動節奏','默契高塔 · 互相助攻','低空通道 · 滑鏟前進','最後約定 · 同步開門','晴空塔頂 · 引誘衝刺後踩頭'];
     function buildCoop(idx){
-        if(idx===9) return buildFinale();
-        const H=Math.max(760,screenH), GY=H-90, W=2600, byId={};
-        const statics=[],hazards=[],coins=[],mechs=[];
+        if(idx===9){const l=buildFinale();l.checkpoints=[{x:650,y:l.gy,active:false},{x:920,y:l.gy-560,active:false}];l.signs=[{x:300,y:l.gy-100,text:'W / ↑ 跳 · 孟寶可二段跳'},{x:860,y:l.gy-630,text:'引誘衝刺 → 等它力竭 → 跳上頭頂'}];return l;}
+        const H=Math.max(760,screenH),GY=H-90,W=3000,byId={},statics=[],hazards=[],coins=[],mechs=[];
         const ground=(x,w)=>statics.push({x,y:GY,w,h:H-GY});
         const plat=(x,y,w)=>statics.push({x,y,w,h:18,oneway:true});
-        const coin=(x,y)=>coins.push({x,y,got:false});
-        const addM=m=>{ mechs.push(m); if(m.id) byId[m.id]=m; };
-        ground(0,620); ground(760,280);                          // 起點 + 中島 (中間 140 缺口可跳)
-        hazards.push({x:1040,y:GY-18,w:560,h:18});               // 中段坑底尖刺
-        plat(1120,GY-110,120); plat(1300,GY-150,120); plat(1460,GY-110,120);   // 保證可過的踏腳石
-        coin(1160,GY-150); coin(1340,GY-190); coin(1500,GY-150);
-        const f=idx%7;
-        if(f===0){ addM(MovingPlatform({x:1120,y:GY-60,w:120,ax:0,ay:1,range:70,speed:1.5})); }                                 // 升降平台
-        else if(f===1){ addM(Bounce({x:1300,y:GY-26,w:80})); plat(1270,GY-260,130); coin(1320,GY-300); coin(1360,GY-300); }    // 彈跳板上高台
-        else if(f===2){ addM(Gate({id:'g'+idx,x:1600,y:GY-130,w:26,h:130})); addM(Switch({x:840,y:GY-14,w:130,need:2,latch:true,target:'g'+idx})); } // 雙人同步門
-        else if(f===3){ addM(Bridge({id:'b'+idx,x:1040,y:GY-28,w:560})); addM(Switch({x:840,y:GY-14,w:120,need:1,latch:true,target:'b'+idx})); }     // 按鈕降吊橋
-        else if(f===4){ hazards.push({x:1040,y:GY-44,w:560,h:26,needShield:true}); }                                            // 護盾橋(需護盾才不受傷)
-        else if(f===5){ addM(MovingPlatform({x:1100,y:GY-80,w:110,ax:1,ay:0,range:120,speed:1.4})); addM(MovingPlatform({x:1380,y:GY-150,w:110,ax:0,ay:1,range:90,speed:1.7,phase:1.5})); } // 浮島
-        else { addM(Bounce({x:1100,y:GY-26,w:80})); plat(1260,GY-180,110); plat(1430,GY-250,110); coin(1480,GY-290); }          // 互墊腳塔
-        ground(1600,520);                                        // 1600..2120
-        plat(2000,GY-140,150); coin(2050,GY-180); coin(2090,GY-180);   // 高台愛心幣 (助攻/二段跳)
-        ground(2120,480);                                        // 2120..2600
-        for(let i=0;i<3;i++) coin(360+i*60,GY-60);
-        const goal={x:2470,y:GY-92,w:54,h:92};
-        return { theme:idx, world:{w:W,h:H}, gy:GY, statics, hazards, coins, mechs, byId, goal, drops:[], p1:{x:70,y:GY-60}, p2:{x:150,y:GY-60} };
+        const add=m=>{mechs.push(m);if(m.id)byId[m.id]=m;};
+        ground(0,1020);ground(1720,1280);
+        // Safe first gap teaches jumping before a more demanding island section.
+        statics.splice(0,1,{x:0,y:GY,w:620,h:90},{x:760,y:GY,w:260,h:90});
+        hazards.push({x:1040,y:GY+55,w:650,h:20});
+        plat(1110,GY-70,140);plat(1330,GY-130,145);plat(1545,GY-70,140);
+        const f=idx%9;
+        if(f===0)add(MovingPlatform({x:1120,y:GY-85,w:130,ay:1,range:38,speed:1.2}));
+        if(f===1){add(Bounce({x:900,y:GY-12,w:75}));plat(1070,GY-220,170);plat(1340,GY-235,150);}
+        if(f===2||f===8){add(Gate({id:'gate',x:1830,y:GY-165,w:28,h:165}));add(Switch({x:805,y:GY-14,w:150,need:2,target:'gate'}));}
+        if(f===3){add(Bridge({id:'bridge',x:1010,y:GY-12,w:720}));add(Switch({x:815,y:GY-14,w:140,need:1,target:'bridge'}));}
+        if(f===4){add(Bridge({id:'bridge',x:1010,y:GY-12,w:720}));byId.bridge.active=true;hazards.push({x:1130,y:GY-40,w:470,h:26,needShield:true});}
+        if(f===5){add(MovingPlatform({x:1130,y:GY-120,w:130,ax:1,range:65,speed:1.4}));add(MovingPlatform({x:1440,y:GY-150,w:130,ay:1,range:50,speed:1.2}));}
+        if(f===6){add(Bounce({x:1920,y:GY-12,w:90}));plat(2040,GY-180,180);plat(2260,GY-240,180);}
+        if(f===7){statics.push({x:2050,y:GY-115,w:320,h:80});}
+        // Optional upper route rewards cooperation, never blocks basic completion.
+        plat(2070,GY-145,160);plat(2310,GY-205,160);
+        for(const [x,y] of [[350,GY-30],[420,GY-30],[490,GY-30],[1170,GY-105],[1390,GY-165],[1600,GY-105],[2110,GY-180],[2370,GY-240],[2730,GY-30]])coins.push({x,y,got:false});
+        const signs=[{x:310,y:GY-100,text:'W / ↑ 跳 · 孟寶可二段跳'},{x:835,y:GY-130,text:f===2||f===8?'兩人一起站上開關，開門後永久保持':f===3?'踩下開關，展開吊橋':f===4?'崴寶技能共享護盾 · 或走上方踏石':'踏石跨越 · 留意隊友的位置'},{x:2180,y:GY-270,text:f===7?'按住 S / ↓ 滑鏟穿過低道':'高台愛心 · 默契能量 +12'}];
+        return{theme:idx,world:{w:W,h:H},gy:GY,statics,hazards,coins,mechs,byId,goal:{x:2860,y:GY-100,w:70,h:100},drops:[],checkpoints:[{x:820,y:GY,active:false},{x:1780,y:GY,active:false}],signs,p1:{x:80,y:GY-52},p2:{x:150,y:GY-52}};
     }
     function buildRace(dist){
-        const H=Math.max(760,screenH), GY=H-90, W=Math.max(2600,dist);
-        const statics=[],hazards=[],coins=[],mechs=[],drops=[];
-        statics.push({x:0,y:GY,w:W,h:H-GY});
-        for(let x=520;x<W-360;x+=360){
-            if(Math.random()<0.5) statics.push({x,y:GY-130,w:140,h:18,oneway:true});
-            if(Math.random()<0.45) hazards.push({x:x+200,y:GY-22,w:54,h:22,stun:true});
+        const H=Math.max(760,screenH),GY=H-90,W=PL.sudden?1800:Math.max(2600,dist),statics=[{x:0,y:GY,w:W,h:90}],hazards=[],coins=[],drops=[],mechs=[],fastZones=[],signs=[];
+        // Both players use independent pickups on the same deterministic geometry.
+        for(let x=540,n=0;x<W-650;x+=620,n++){
+            if(n%3===0){
+                statics.push({x,y:GY-95,w:110,h:16,oneway:true},{x:x+150,y:GY-155,w:250,h:18,oneway:true});
+                fastZones.push({x:x+150,y:GY-165,w:250,h:22});hazards.push({x:x+240,y:GY-20,w:46,h:20});
+                signs.push({x:x+120,y:GY-210,text:'高台捷徑 >>>'});
+                for(let j=0;j<4;j++)coins.push({x:x+170+j*55,y:GY-189,got:[false,false]});
+            }else if(n%3===1){
+                statics.push({x:x+40,y:GY-117,w:220,h:82});signs.push({x:x+140,y:GY-155,text:'S / ↓ 滑鏟通道'});
+                for(let j=0;j<4;j++)coins.push({x:x+60+j*48,y:GY-25,got:[false,false]});
+            }else{
+                for(let j=0;j<2;j++)hazards.push({x:x+j*170,y:GY-23,w:42,h:23});
+                for(let j=0;j<4;j++)coins.push({x:x+50+j*55,y:GY-100,got:[false,false]});
+            }
+            drops.push({x:x-100,y:GY-32,taken:[false,false]});
         }
-        for(let x=440;x<W-720;x+=440) drops.push({x,y:GY-150,taken:false});
-        const boostZone = PL.sudden ? {x:W-1100,w:940} : {x:W-680,w:520};   // 黃金衝刺：更長更明顯的加速帶
-        const goal={x:W-150,y:GY-150,w:62,h:150};
-        return { theme:Math.min(9,Math.floor(dist/1500)), world:{w:W,h:H}, gy:GY, statics, hazards, coins, mechs, byId:{}, goal, drops, boostZone, p1:{x:50,y:GY-60}, p2:{x:120,y:GY-60} };
+        const boostZone={x:W-(PL.sudden?650:420),w:W,y:GY};
+        return{theme:Math.min(9,Math.floor(dist/1500)),world:{w:W,h:H},gy:GY,statics,hazards,coins,mechs,byId:{},goal:{x:W-100,y:GY-160,w:64,h:160},drops,boostZone,fastZones,signs,p1:{x:65,y:GY-52},p2:{x:65,y:GY-52}};
     }
+
 
     // ---------- 共用更新/繪製 ----------
-    function plBuildPlats(level){ level.plats=level.statics.slice(); for(const m of level.mechs){ if(m.update)m.update(level); if(m.solidRect){ const r=m.solidRect(); if(r)level.plats.push(r);} } }
+    function plBuildPlats(level){for(const m of level.mechs)if(m.update)m.update(level);level.plats=level.statics.slice();for(const m of level.mechs){const r=m.solidRect?.();if(r)level.plats.push(r);}}
+
+    let renderPlayer=-1;
     function plDrawWorld(){
-        const level=PL.level, col=CHAPTERS[level.theme].colors;
-        const sky=ctx.createLinearGradient(0,0,0,level.world.h); sky.addColorStop(0,col.skyTop); sky.addColorStop(1,col.skyBottom);
-        ctx.fillStyle=sky; ctx.fillRect(0,0,level.world.w,level.world.h);
-        for(const p of level.statics){ if(p.oneway) drawPlat(ctx,p,col.accent,'#2b1d3a'); else { drawPlat(ctx,p,col.ground,'#1d1330'); ctx.fillStyle=col.accent; ctx.fillRect(p.x,p.y-3,p.w,3);} }
-        for(const m of level.mechs) if(m.draw) m.draw(ctx);
-        for(const hz of level.hazards) drawHazardZone(ctx,hz);
-        for(const tb of PL.trollBlocks){ ctx.fillStyle='#7a3b8f'; ctx.fillRect(tb.x,tb.y,tb.w,tb.h); ctx.fillStyle='#fff'; ctx.font='10px DotGothic16'; ctx.textAlign='center'; ctx.fillText('酸',tb.x+tb.w/2,tb.y+tb.h/2+4); }
-        for(const c of level.coins) if(!c.got) drawHeartWorld(ctx,c);
-        for(const d of level.drops) drawDrop(ctx,d);
-        if(level.boostZone){ const z=level.boostZone; for(let x=z.x;x<z.x+z.w;x+=40){ ctx.fillStyle='rgba(255,210,74,.55)'; ctx.beginPath(); ctx.moveTo(x,level.gy-44); ctx.lineTo(x+26,level.gy-22); ctx.lineTo(x,level.gy); ctx.closePath(); ctx.fill(); } }
-        if(level.boss && !level.bossDefeated) level.boss.draw(ctx);
+        const level=PL.level,col=CHAPTERS[level.theme].colors;
+        const sky=ctx.createLinearGradient(0,0,0,level.world.h);sky.addColorStop(0,col.skyTop);sky.addColorStop(1,col.skyBottom);ctx.fillStyle=sky;ctx.fillRect(0,0,level.world.w,level.world.h);
+        ctx.save();
+        for(let i=0;i<65;i++){const x=(i*137+53)%level.world.w,y=50+(i*73)%Math.max(60,level.gy-180);ctx.globalAlpha=.22+.2*Math.sin(i+PL.tick*.015);ctx.fillStyle='#fff8df';ctx.fillRect(x,y,2+(i%3===0),2+(i%3===0));}
+        ctx.globalAlpha=.13;ctx.fillStyle=col.accent;
+        for(let x=0;x<level.world.w;x+=160){const h=70+(Math.sin(x*1.3)+1)*65;ctx.fillRect(x,level.gy-h,130,h);ctx.fillRect(x+24,level.gy-h-20,70,25);}
+        ctx.restore();
+        for(const p of level.statics){drawPlat(ctx,p,p.oneway?col.accent:col.ground,'#241c38');if(!p.oneway){ctx.fillStyle=col.accent;ctx.fillRect(p.x,p.y,p.w,5);ctx.fillStyle='rgba(255,255,255,.08)';for(let x=p.x+10;x<p.x+p.w;x+=40)ctx.fillRect(x,p.y+18,18,3);}}
+        for(const z of level.fastZones||[]){ctx.fillStyle='#7affe0';ctx.globalAlpha=.5;ctx.fillRect(z.x,z.y+8,z.w,4);ctx.globalAlpha=1;}
+        for(const m of level.mechs)if(m.draw)m.draw(ctx);
+        for(const hz of level.hazards)drawHazardZone(ctx,hz);
+        for(const tb of PL.trollBlocks){ctx.fillStyle='#a04bc6';ctx.fillRect(tb.x,tb.y,tb.w,tb.h);ctx.fillStyle='#fff';ctx.font='15px sans-serif';ctx.textAlign='center';ctx.fillText('!',tb.x+tb.w/2,tb.y+25);}
+        for(const c of level.coins)if(!(Array.isArray(c.got)?c.got[renderPlayer]:c.got))drawHeartWorld(ctx,c);
+        for(const d of level.drops)if(!(Array.isArray(d.taken)?d.taken[renderPlayer]:d.taken))drawDrop(ctx,{...d,taken:false});
+        for(const c of level.checkpoints||[]){ctx.fillStyle=c.active?'#8affcf':'#9888b4';ctx.fillRect(c.x,c.y-72,4,72);ctx.beginPath();ctx.moveTo(c.x+4,c.y-72);ctx.lineTo(c.x+36,c.y-60);ctx.lineTo(c.x+4,c.y-48);ctx.fill();ctx.font='12px sans-serif';ctx.textAlign='center';ctx.fillText(c.active?'檢查點 ✓':'雙人集合',c.x+10,c.y-85);}
+        for(const sign of level.signs||[]){ctx.font='13px sans-serif';const w=ctx.measureText(sign.text).width+24;ctx.fillStyle='rgba(12,8,30,.8)';ctx.fillRect(sign.x-w/2,sign.y-19,w,30);ctx.fillStyle='#e4dcff';ctx.textAlign='center';ctx.fillText(sign.text,sign.x,sign.y);}
+        if(level.boostZone){const z=level.boostZone;ctx.fillStyle='#ffd166';for(let x=z.x;x<Math.min(z.x+z.w,level.world.w);x+=44){ctx.globalAlpha=.4+.2*Math.sin(PL.tick*.12);ctx.beginPath();ctx.moveTo(x,level.gy-24);ctx.lineTo(x+22,level.gy-14);ctx.lineTo(x,level.gy-4);ctx.fill();}ctx.globalAlpha=1;}
+        if(level.boss&&!level.bossDefeated)level.boss.draw(ctx);
         drawGoal(ctx,level.goal,col);
-        for(const ch of PL.chars) ch.draw(ctx);
+        if(PL.mode==='coop'&&PL.energy>=50){const[a,b]=PL.chars;if(Math.abs(a.x-b.x)<130){ctx.strokeStyle='rgba(255,218,130,.4)';ctx.setLineDash([4,7]);ctx.beginPath();ctx.moveTo(a.x+15,a.y+26);ctx.lineTo(b.x+15,b.y+26);ctx.stroke();ctx.setLineDash([]);}}
+        for(let i=0;i<PL.chars.length;i++){
+            const ch=PL.chars[i],own=PL.chars[renderPlayer];
+            if(own&&i!==renderPlayer&&Math.abs(ch.x-own.x)<35&&Math.abs(ch.y-own.y)<55)continue;
+            ch.draw(ctx);
+        }
+        for(const p of PL.fx){ctx.globalAlpha=p.life/p.max;ctx.fillStyle=p.color;ctx.fillRect(p.x,p.y,3,3);}ctx.globalAlpha=1;
+        for(const l of PL.labels){ctx.globalAlpha=Math.min(1,l.life/20);ctx.font='bold 13px sans-serif';ctx.textAlign='center';ctx.fillStyle=l.color;ctx.fillText(l.text,l.x,l.y);}ctx.globalAlpha=1;
     }
-    function plCoopCam(level){ const a=PL.chars[0],b=PL.chars[1]; const mx=(a.x+b.x)/2+a.w/2, my=(a.y+b.y)/2+a.fullH/2;
-        return { x:clamp(mx-screenW/2,0,Math.max(0,level.world.w-screenW)), y:clamp(my-screenH/2,0,Math.max(0,level.world.h-screenH)) }; }
+    function plCoopCam(level){
+        const a=PL.chars[0],b=PL.chars[1],active=PL.chars.filter(c=>!c.isDown);
+        const xs=active.map(c=>c.x),ys=active.map(c=>c.y);
+        const target={x:clamp((Math.min(...xs)+Math.max(...xs))/2+15-screenW/2,0,Math.max(0,level.world.w-screenW)),y:clamp((Math.min(...ys)+Math.max(...ys))/2+26-screenH*.52,0,Math.max(0,level.world.h-screenH))};
+        if(!PL.cam)PL.cam={...target};else{PL.cam.x+=(target.x-PL.cam.x)*.12;PL.cam.y+=(target.y-PL.cam.y)*.12;}
+        const gapX=Math.abs(a.x-b.x),gapY=Math.abs(a.y-b.y);
+        PL.split=PL.split?(gapX>screenW*.6||gapY>screenH*.5):(gapX>screenW*.8||gapY>screenH*.7);
+        return PL.cam;
+    }
     function plDrawRace(level){
         const halfW=screenW/2;
-        for(let i=0;i<2;i++){ const ch=PL.chars[i], vx=i*halfW;
-            ctx.save(); ctx.beginPath(); ctx.rect(vx,0,halfW,screenH); ctx.clip();
-            const camx=clamp(ch.x+ch.w/2-halfW/2,0,Math.max(0,level.world.w-halfW));
-            const camy=clamp(ch.y-screenH*0.55,0,Math.max(0,level.world.h-screenH));
-            ctx.translate(vx-camx,-camy); plDrawWorld(); ctx.restore();
+        for(let i=0;i<2;i++){
+            const ch=PL.chars[i],vx=i*halfW;ctx.save();ctx.beginPath();ctx.rect(vx,0,halfW,screenH);ctx.clip();
+            const camx=clamp(ch.x+15-halfW*.42,0,Math.max(0,level.world.w-halfW));
+            const camy=clamp(ch.y-screenH*.57,0,Math.max(0,level.world.h-screenH));
+            ctx.translate(vx-camx,-camy);renderPlayer=PL.mode==='race'?i:-1;plDrawWorld();ctx.restore();
         }
-        ctx.fillStyle='#000'; ctx.fillRect(halfW-2,0,4,screenH);
+        renderPlayer=-1;ctx.fillStyle='#20162f';ctx.fillRect(halfW-2,0,4,screenH);
     }
+
+
     function drawHeartHud(g,x,y,filled){ const s=4,m=[[0,1,0,1,0],[1,1,1,1,1],[1,1,1,1,1],[0,1,1,1,0],[0,0,1,0,0]]; g.fillStyle=filled?'#ff5a7a':'rgba(255,255,255,.25)'; for(let r=0;r<5;r++)for(let q=0;q<5;q++) if(m[r][q]) g.fillRect(x+q*s,y+r*s,s,s); }
+
     function plDrawHUD(level){
-        ctx.save(); ctx.textAlign='left';
+        ctx.save();ctx.fillStyle='rgba(10,7,26,.84)';ctx.fillRect(0,0,screenW,108);
+        const names=['崴寶','孟寶'],cols=['#91c6ff','#ffd166'];ctx.font='14px sans-serif';
         if(PL.mode==='coop'){
-            const a=PL.chars[0],b=PL.chars[1];
-            for(let i=0;i<3;i++) drawHeartHud(ctx,16+i*26,16,i<a.hp);
-            ctx.textAlign='right'; for(let i=0;i<3;i++) drawHeartHud(ctx,screenW-18-i*26-20,16,i<b.hp); ctx.textAlign='left';
-            ctx.fillStyle='#7eb6ff'; ctx.font='13px DotGothic16'; ctx.fillText('崴寶 P1',16,52);
-            ctx.fillStyle='#ffc14d'; ctx.textAlign='right'; ctx.fillText('孟寶 P2',screenW-16,52); ctx.textAlign='center';
-            ctx.fillStyle='#fff'; ctx.font='16px DotGothic16'; ctx.fillText(`第${level.theme+1}關　${CHAPTERS[level.theme].name}`,screenW/2,28);
-            const prog=Math.max(a.x,b.x)/level.world.w; ctx.fillStyle='rgba(0,0,0,.4)'; ctx.fillRect(screenW/2-110,38,220,10); ctx.fillStyle='#7CFC9C'; ctx.fillRect(screenW/2-110,38,220*clamp(prog,0,1),10);
-            if(PL.dashCd>0){ ctx.fillStyle='#aaa'; ctx.font='11px DotGothic16'; ctx.fillText('合體衝刺冷卻 '+Math.ceil(PL.dashCd/60)+'s',screenW/2,64); }
-            else { ctx.fillStyle='#ffd24a'; ctx.font='11px DotGothic16'; ctx.fillText('靠近同按技能 = 合體衝刺',screenW/2,64); }
-        } else {
-            const t=((performance.now()-PL.startTime)/1000).toFixed(1);
-            ctx.textAlign='center'; ctx.fillStyle='#fff'; ctx.font='18px DotGothic16'; ctx.fillText(t+'s',screenW/2,26);
-            const names=['崴寶','孟寶'], cols=['#7eb6ff','#ffc14d'];
-            for(let i=0;i<2;i++){ const ch=PL.chars[i], bx=i===0?20:screenW/2+20, bw=screenW/2-40, prog=ch.x/level.world.w;
-                ctx.textAlign='left'; ctx.fillStyle=cols[i]; ctx.font='13px DotGothic16'; ctx.fillText(names[i]+' P'+(i+1),bx,44);
-                ctx.fillStyle='rgba(0,0,0,.4)'; ctx.fillRect(bx,50,bw,10); ctx.fillStyle=cols[i]; ctx.fillRect(bx,50,bw*clamp(prog,0,1),10);
-                ctx.fillStyle='#fff'; ctx.fillText('道具：'+(ch.item?ITEM_NAME[ch.item].split(' ')[0]:'—'),bx,76);
-            }
-            const lead=PL.chars[0].x>PL.chars[1].x?0:1; ctx.textAlign='center'; ctx.fillStyle=cols[lead]; ctx.font='12px DotGothic16'; ctx.fillText('▲ 領先',lead===0?screenW*0.25:screenW*0.75,92);
+            const center=screenW/2,barW=Math.min(240,screenW*.24);
+            PL.chars.forEach((ch,i)=>{const x=i?screenW-24:20;ctx.textAlign=i?'right':'left';ctx.fillStyle=cols[i];ctx.fillText(names[i]+' P'+(i+1),x,22);for(let j=0;j<3;j++)drawHeartHud(ctx,i?screenW-44-j*26:20+j*26,32,j<ch.hp);ctx.font='12px sans-serif';ctx.fillStyle='#ded5ee';ctx.fillText(ch.isDown?'等待救援':ch.skillCd?'技能 '+(ch.skillCd/60).toFixed(1)+'s':'技能 '+keyLabel(ch.controls.skill)+' · 就緒',x,70);ctx.fillText(ch.type==='wei'?(ch.shield?'護盾就緒':'充能 '+Math.ceil((540-ch.shieldCharge)/60)+'s'):'空中可再跳一次',x,92);ctx.font='14px sans-serif';});
+            ctx.textAlign='center';ctx.fillStyle='#f4edff';ctx.fillText('第 '+(level.theme+1)+' 關 · '+COOP_TASKS[level.theme],center,24);
+            ctx.fillStyle='#312842';ctx.fillRect(center-barW/2,38,barW,7);ctx.fillStyle='#8bffca';ctx.fillRect(center-barW/2,38,barW*clamp(Math.min(...PL.chars.map(c=>c.x))/level.goal.x,0,1),7);
+            ctx.font='12px sans-serif';ctx.fillStyle='#ffd166';ctx.fillText('默契 '+Math.floor(PL.energy)+'% · 愛心 '+PL.hearts+'/'+level.coins.length,center,65);
+            ctx.fillStyle=PL.energy>=50?'#ffe6a2':'#b8a9d0';ctx.fillText(PL.dashCd?'合體衝刺冷卻 '+Math.ceil(PL.dashCd/60)+'s':PL.energy>=50?'靠近後，同按技能 → 合體衝刺':'並肩前進、收集愛心，充能至 50%',center,87);
+        }else{
+            PL.chars.forEach((ch,i)=>{
+                const x=i*screenW/2+22,w=screenW/2-44;ctx.textAlign='left';ctx.fillStyle=cols[i];ctx.fillText(names[i]+' P'+(i+1),x,23);
+                ctx.font='12px sans-serif';ctx.fillStyle='#dfd6f2';ctx.fillText('技能 '+keyLabel(ch.controls.skill)+' · '+(ch.skillCd?Math.ceil(ch.skillCd/60)+'s':'就緒')+'  |  充能 '+Math.floor(ch.charge)+'%',x,46);
+                ctx.fillStyle='#322640';ctx.fillRect(x,55,w,6);ctx.fillStyle=cols[i];ctx.fillRect(x,55,w*clamp(ch.x/level.goal.x,0,1),6);
+                ctx.fillStyle='#fff2b8';ctx.fillText('道具 '+keyLabel(ch.controls.item)+' · '+(ch.item?ITEM_NAME[ch.item]:'尚未取得'),x,81);
+                ctx.fillStyle='#a8c9bd';ctx.fillText('距終點 '+Math.max(0,Math.ceil(level.goal.x-ch.x))+'m',x,99);ctx.font='14px sans-serif';
+            });
+            ctx.textAlign='center';ctx.fillStyle='#fff';ctx.font='bold 16px sans-serif';ctx.fillText((PL.elapsed/60).toFixed(1)+'s',screenW/2,130);
         }
-        if(PL.message&&PL.msgT>0){ ctx.textAlign='center'; ctx.globalAlpha=Math.min(1,PL.msgT/40); ctx.fillStyle='#fff'; ctx.font='22px DotGothic16'; ctx.fillText(PL.message,screenW/2,screenH*0.30); ctx.globalAlpha=1; }
-        // 開場操作教學卡：清楚、置中、數秒後淡出
-        if(PL.tutT>0){
-            const a=Math.min(1,PL.tutT/45);
-            const bw=Math.min(580,screenW*0.88), bh=130, bx=screenW/2-bw/2, by=screenH*0.40;
-            ctx.globalAlpha=a; ctx.fillStyle='rgba(12,8,28,0.9)'; ctx.fillRect(bx,by,bw,bh);
-            ctx.strokeStyle='#ffd24a'; ctx.lineWidth=3; ctx.strokeRect(bx,by,bw,bh);
-            ctx.textAlign='center'; ctx.fillStyle='#ffd24a'; ctx.font='18px DotGothic16'; ctx.fillText('操作說明',screenW/2,by+28);
-            ctx.font='16px DotGothic16';
-            ctx.fillStyle='#7eb6ff'; ctx.fillText(`崴寶 P1　${keyLabel(P1CTRL.left)}${keyLabel(P1CTRL.right)} 移動 ・ ${keyLabel(P1CTRL.jump)} 跳 ・ ${keyLabel(P1CTRL.slide)} 滑 ・ ${keyLabel(P1CTRL.skill)} 技 ・ ${keyLabel(P1CTRL.item)} 道`, screenW/2, by+60);
-            ctx.fillStyle='#ffc14d'; ctx.fillText(`孟寶 P2　${keyLabel(P2CTRL.left)}${keyLabel(P2CTRL.right)} 移動 ・ ${keyLabel(P2CTRL.jump)} 跳 ・ ${keyLabel(P2CTRL.slide)} 滑 ・ ${keyLabel(P2CTRL.skill)} 技 ・ ${keyLabel(P2CTRL.item)} 道`, screenW/2, by+88);
-            ctx.fillStyle='#cbb8e0'; ctx.font='13px DotGothic16'; ctx.fillText('可在主選單「操作設定」自訂按鍵',screenW/2,by+114);
-            ctx.globalAlpha=1;
-        }
+        if(PL.message&&PL.msgT>0){ctx.textAlign='center';ctx.globalAlpha=Math.min(1,PL.msgT/25);ctx.font='bold '+Math.min(19,screenW/40)+'px sans-serif';const w=Math.min(screenW-32,ctx.measureText(PL.message).width+36);ctx.fillStyle='rgba(14,8,30,.85)';ctx.fillRect((screenW-w)/2,screenH*.22-25,w,42);ctx.fillStyle='#fff0bf';ctx.fillText(PL.message,screenW/2,screenH*.22+2);ctx.globalAlpha=1;}
+        if(PL.countdown>0){const text=PL.countdown>45?String(Math.ceil((PL.countdown-45)/60)):'GO!';ctx.fillStyle='rgba(9,6,25,.4)';ctx.fillRect(0,108,screenW,screenH-108);ctx.font='bold 76px sans-serif';ctx.textAlign='center';ctx.fillStyle='#ffe09a';ctx.fillText(text,screenW/2,screenH*.48);ctx.font='16px sans-serif';ctx.fillStyle='#e8defb';ctx.fillText('同一條賽道 · 各自收集愛心與道具',screenW/2,screenH*.48+42);}
+        ctx.fillStyle='rgba(10,7,26,.8)';ctx.fillRect(screenW/2-220,screenH-48,440,32);ctx.textAlign='center';ctx.font='12px sans-serif';ctx.fillStyle='#d2c5e8';ctx.fillText(PL.mode==='coop'?`${keyLabel(P1CTRL.jump)} / ${keyLabel(P2CTRL.jump)} 跳 · ${keyLabel(P1CTRL.slide)} / ${keyLabel(P2CTRL.slide)} 滑鏟 · 靠近按住技能救援 · Esc 暫停`:'高台捷徑 / 滑鏟通道 · 愛心縮短技能冷卻 · Esc 暫停',screenW/2,screenH-27);
         ctx.restore();
     }
-
-    // ---------- 互動 ----------
-    function plKeyDown(code){ PL.chars.forEach((ch,i)=>{ if(code===ch.controls.jump) ch.jump(); if(code===ch.controls.item) plUseItem(i); if(code===ch.controls.skill||(ch.controls===P2CTRL&&code==='ShiftLeft')) plSkill(i); }); }
+    // ---------- Interaction ----------
+    function plKeyDown(code){if(PL.countdown>0)return;PL.chars.forEach((ch,i)=>{if(code===ch.controls.jump)ch.jump();if(code===ch.controls.item)plUseItem(i);if(code===ch.controls.skill)plSkill(i);});}
     function plSkill(i){
-        const me=PL.chars[i], other=PL.chars[1-i]; if(!me||me.isDown) return;
-        if(PL.mode==='coop'&&other){
-            const near=Math.abs((me.x+me.w/2)-(other.x+other.w/2))<100&&Math.abs(me.y-other.y)<80;
-            if(other.isDown&&near){ other.isDown=false; other.hp=1; other.invT=120; other.vx=0; sfx.eat(); plMsg('救援成功！'); return; }
-            if(near&&(keyState[other.controls.skill]||keyState['ShiftLeft'])&&PL.dashCd<=0){ me.dashT=110; other.dashT=110; me.invT=110; other.invT=110; PL.dashCd=600; sfx.chord(); plMsg('合體衝刺！'); return; }
-            if(me.type==='wei'&&me.shield>0&&near){ me.shield--; other.shield=1; other.shieldT=300; sfx.shieldBreak(); plMsg('護盾傳遞！'); return; }
-            if(me.type==='meng'&&near&&other.y>me.y){ other.vy=JUMP_V*1.15; sfx.jump(); plMsg('跳台助攻！'); return; }
-        }
-        if(PL.mode==='race'&&me.skillCd<=0){ me.boostT=80; me.skillCd=300; sfx.jump(); }
+        const me=PL.chars[i],other=PL.chars[1-i];if(!me||me.isDown||me.stun>0)return;
+        me.skillIntent=PL.tick;
+        if(PL.mode==='coop'){
+            const near=Math.hypot(me.x-other.x,me.y-other.y)<125;
+            if(other.isDown){if(!near)plMsg('靠近隊友，再按住技能救援');return;}
+            if(near&&PL.tick-other.skillIntent<=18&&PL.dashCd<=0&&PL.energy>=50){
+                for(const ch of PL.chars){ch.dashT=48;ch.invT=65;ch.dashDir=me.facing;}PL.energy-=50;PL.dashCd=300;plMsg('默契爆發！合體衝刺',160);plBurst(me.x,me.y,'#ffdb8c',25);sfx.chord();return;
+            }
+            if(me.skillCd>0){plFloat(me.x,me.y-28,'冷卻中');return;}
+            if(me.type==='wei'){
+                if(!me.shield){plFloat(me.x,me.y-28,'護盾充能中','#91c6ff');return;}
+                if(!near){plMsg('靠近孟寶，技能可共享護盾');return;}
+                other.shield=1;other.shieldT=360;me.skillCd=300;me.shield=0;me.invT=90;plFloat(other.x,other.y-30,'共享護盾 6s','#91c6ff');plBurst(other.x,other.y,'#91c6ff',16);sfx.shieldBreak();
+            }else{
+                if(!near){plMsg('靠近崴寶，技能可協助隊友登高');return;}
+                other.vy=JUMP_V*1.15;other.onGround=false;other.coyote=0;me.vy=JUMP_V*.8;me.onGround=false;me.coyote=0;me.skillCd=240;plFloat(other.x,other.y-30,'一起跳！','#ffd166');sfx.jump();
+            }
+        }else if(me.skillCd<=0){me.boostT=70+Math.floor(me.charge*.6);me.charge=0;me.skillCd=270;plFloat(me.x,me.y-20,'衝刺！');plBurst(me.x,me.y,'#ffd166',15);sfx.jump();}
     }
     function plUseItem(i){
-        const me=PL.chars[i], other=PL.chars[1-i]; if(!me||!me.item) return; const it=me.item; me.item=null;
-        if(it==='cake') me.boostT=180;
-        else if(it==='bolt'){ if(other) other.slowT=100; }
-        else if(it==='shield'){ me.shield=1; me.shieldT=600; }
-        else if(it==='note'){ if(other) other.reverseT=150; }
-        else if(it==='troll'){ if(other) PL.trollBlocks.push({x:other.x+other.facing*220,y:other.y-10,w:30,h:46,t:240}); }
-        sfx.eat(); plMsg(ITEM_NAME[it]);
+        const me=PL.chars[i],other=PL.chars[1-i];if(!me||me.isDown||!me.item)return;const it=me.item;me.item=null;
+        const blocked=()=>{if(other.shield>0){other.shield=0;other.shieldT=0;plFloat(other.x,other.y-30,'護盾抵擋！','#91c6ff');sfx.shieldBreak();return true;}return other.invT>0;};
+        if(it==='cake')me.boostT=140;
+        else if(it==='shield'){me.shield=1;me.shieldT=480;}
+        else if(!blocked()){
+            if(it==='bolt')other.slowT=95;
+            if(it==='note')other.reverseT=100;
+            if(it==='troll')PL.trollBlocks.push({x:other.x+other.facing*160,y:PL.level.gy-42,w:28,h:42,t:220,owner:i});
+        }
+        sfx.eat();plFloat(me.x,me.y-20,ITEM_NAME[it]);
     }
     function plInteract(){
-        const level=PL.level, a=PL.chars[0], b=PL.chars[1];
-        if(PL.dashCd>0)PL.dashCd--; if(PL.msgT>0)PL.msgT--; if(PL.tutT>0)PL.tutT--;
-        for(const c of level.coins){ if(c.got)continue; for(const ch of PL.chars){ if(aabb(ch.hb(),{x:c.x,y:c.y,w:22,h:22})){ c.got=true; ch.score+=100; sfx.eat(); } } }
+        const level=PL.level,[a,b]=PL.chars;
+        if(PL.dashCd>0)PL.dashCd--;if(PL.msgT>0)PL.msgT--;
+        for(const c of level.coins){for(let i=0;i<2;i++){const ch=PL.chars[i];if(ch.isDown||(Array.isArray(c.got)?c.got[i]:c.got))continue;if(aabb(ch.hb(),{x:c.x,y:c.y,w:22,h:22})){
+            if(Array.isArray(c.got))c.got[i]=true;else c.got=true;ch.score+=100;PL.hearts++;PL.energy=Math.min(100,PL.energy+12);ch.charge=Math.min(100,ch.charge+25);ch.skillCd=Math.max(0,ch.skillCd-45);plBurst(c.x,c.y,'#ff87aa');plFloat(c.x,c.y,'+100 ♥');sfx.eat();
+        }}}
         if(PL.mode==='coop'){
-            [[a,b],[b,a]].forEach(([x,y])=>{ if(y.isDown&&aabb(x.hb(),{x:y.x,y:y.y-6,w:y.w,h:16})&&x.vy>=0){ y.isDown=false;y.hp=1;y.invT=120; sfx.eat(); plMsg('踩頭救援！'); } });
-            if(a.isDown&&b.isDown){ plFail(); return; }
-            if(aabb(a.hb(),level.goal)&&aabb(b.hb(),level.goal)){ if(level.boss&&!level.bossDefeated) plMsg('先合力打倒酸民王！'); else { plWin(); return; } }
-        } else {
-            if(aabb(a.hb(),b.hb())){
-                if(a.vy>0&&a.y+a.fullH<b.y+20){ a.vy=JUMP_V*0.8; b.stun=22; b.vx=0; sfx.duck(); }
-                else if(b.vy>0&&b.y+b.fullH<a.y+20){ b.vy=JUMP_V*0.8; a.stun=22; a.vx=0; sfx.duck(); }
-                else { const dir=Math.sign(a.x-b.x)||1; a.vx=dir*6; b.vx=-dir*6; a.x+=dir*2; b.x-=dir*2; }
+            if(a.isDown&&b.isDown){plFail();return;}
+            if(!a.isDown&&!b.isDown&&Math.abs(a.x-b.x)<180&&(Math.abs(a.vx)>1||Math.abs(b.vx)>1))PL.energy=Math.min(100,PL.energy+.035);
+            for(const [me,other] of [[a,b],[b,a]])if(!me.isDown&&other.isDown&&Math.hypot(me.x-other.x,me.y-other.y)<110&&keyState[me.controls.skill]){other.revive+=1.3;if(other.revive>=50)plRevive(other);}
+            for(const c of level.checkpoints||[]){if(c.active)continue;if(PL.chars.every(ch=>!ch.isDown&&Math.abs(ch.x-c.x)<170&&Math.abs(ch.y+ch.fullH-c.y)<75)){
+                c.active=true;PL.chars.forEach((ch,i)=>{ch.spawn={x:c.x-35+i*65,y:c.y-ch.fullH};ch.safe={...ch.spawn};ch.hp=Math.min(3,ch.hp+1);ch.invT=90;});a.shield=1;PL.energy=Math.min(100,PL.energy+15);plMsg('雙人檢查點！恢復生命與護盾',180);plBurst(c.x,c.y-50,'#8affcf',24);sfx.chord();
+            }}
+            if(PL.chars.every(ch=>!ch.isDown&&aabb(ch.hb(),level.goal))){if(level.boss&&!level.bossDefeated)plMsg('先合力打倒酸民王！');else{plWin();return;}}
+        }else{
+            for(const z of level.fastZones||[])for(const ch of PL.chars)if(aabb(ch.hb(),z))ch.boostT=Math.max(ch.boostT,18);
+            if(aabb(a.hb(),b.hb())&&!a.contactCd&&!b.contactCd){
+                if(a.vy>1&&a.y+a.fullH<b.y+20){a.vy=JUMP_V*.8;b.damage();}
+                else if(b.vy>1&&b.y+b.fullH<a.y+20){b.vy=JUMP_V*.8;a.damage();}
+                a.contactCd=b.contactCd=35;
             }
-            for(const d of level.drops){ if(d.taken)continue; for(const ch of PL.chars){ if(!ch.item&&aabb(ch.hb(),{x:d.x,y:d.y,w:28,h:28})){ d.taken=true; ch.item=RACE_ITEMS[(Math.random()*RACE_ITEMS.length)|0]; sfx.eat(); } } }
-            for(let i=PL.trollBlocks.length-1;i>=0;i--){ const tb=PL.trollBlocks[i]; tb.t--; if(tb.t<=0){ PL.trollBlocks.splice(i,1); continue; } for(const ch of PL.chars){ if(aabb(ch.hb(),tb)){ ch.stun=Math.max(ch.stun,16); ch.vx=0; } } }
-            const aG=aabb(a.hb(),level.goal), bG=aabb(b.hb(),level.goal);
-            if(aG&&bG){ if(Math.abs(a.x-b.x)<6) plRaceTie(); else plRaceEnd(a.x>b.x?0:1); return; }
-            if(aG){ plRaceEnd(0); return; }
-            if(bG){ plRaceEnd(1); return; }
+            for(const d of level.drops)for(let i=0;i<2;i++){const ch=PL.chars[i];if(!d.taken[i]&&!ch.item&&aabb(ch.hb(),{x:d.x,y:d.y,w:28,h:28})){d.taken[i]=true;ch.item=RACE_ITEMS[(Math.random()*RACE_ITEMS.length)|0];plFloat(ch.x,ch.y-20,ITEM_NAME[ch.item]);sfx.eat();}}
+            PL.trollBlocks=PL.trollBlocks.filter(tb=>{if(--tb.t<=0)return false;for(let i=0;i<2;i++)if(i!==tb.owner&&aabb(PL.chars[i].hb(),tb))PL.chars[i].damage();return true;});
+            const aG=a.x+a.w>=level.goal.x,bG=b.x+b.w>=level.goal.x;
+            if(aG&&bG){const delta=PL.finishPrev||[a.x,b.x],t0=(level.goal.x-a.w-delta[0])/Math.max(.001,a.x-delta[0]),t1=(level.goal.x-b.w-delta[1])/Math.max(.001,b.x-delta[1]);if(Math.abs(t0-t1)<.02)plRaceTie();else plRaceEnd(t0<t1?0:1);return;}
+            if(aG)plRaceEnd(0);else if(bG)plRaceEnd(1);
         }
     }
 
+
     // ---------- 流程 ----------
+
     function plLoop(){
-        if(gameState!=='coop'&&gameState!=='race') return;
-        PL.tick++; const level=PL.level;
-        ctx.clearRect(0,0,canvas.width,canvas.height);
-        plBuildPlats(level);
-        for(const ch of PL.chars) ch.update(level);
-        if(level.boss && !level.bossDefeated) level.boss.update(level);
-        plInteract();
-        if(gameState!=='coop'&&gameState!=='race') return;
-        if(PL.mode==='coop'){ const cam=plCoopCam(level); ctx.save(); ctx.translate(-Math.round(cam.x),-Math.round(cam.y)); plDrawWorld(); ctx.restore(); }
+        if(!['coop','race'].includes(gameState))return;
+        const level=PL.level;PL.tick++;if(PL.shakeT>0)PL.shakeT--;
+        if(PL.countdown>0){PL.countdown--;if(PL.countdown===0){clearInputs();plMsg('GO！搶上高台，收集愛心為技能充能',140);sfx.chord();}}
+        else{
+            PL.elapsed++;plBuildPlats(level);PL.finishPrev=PL.chars.map(c=>c.x);
+            for(const ch of PL.chars)ch.update(level);
+            if(level.boss&&!level.bossDefeated)level.boss.update(level);
+            plInteract();
+        }
+        for(const p of PL.fx){p.x+=p.vx;p.y+=p.vy;p.vy+=.12;p.life--;}PL.fx=PL.fx.filter(p=>p.life>0);
+        for(const l of PL.labels){l.y-=.55;l.life--;}PL.labels=PL.labels.filter(l=>l.life>0);
+        if(!['coop','race'].includes(gameState))return;
+        ctx.clearRect(0,0,screenW,screenH);ctx.save();if(PL.shakeT>0)ctx.translate(Math.sin(PL.tick*3)*2,Math.cos(PL.tick*4)*2);
+        if(PL.mode==='coop'){const cam=plCoopCam(level);if(PL.split)plDrawRace(level);else{ctx.save();ctx.translate(-Math.round(cam.x),-Math.round(cam.y));renderPlayer=-1;plDrawWorld();ctx.restore();}}
         else plDrawRace(level);
-        plDrawHUD(level);
-        requestAnimationFrame(plLoop);
+        ctx.restore();plDrawHUD(level);startLoop(plLoop);
     }
+    function plResetSession(){
+        clearInputs();Object.assign(PL,{fx:[],labels:[],energy:35,hearts:0,hits:0,rescues:0,elapsed:0,countdown:0,cam:null,split:false,trollBlocks:[],dashCd:0,tick:0,message:'',msgT:0,shakeT:0});
+        plHideScreens();document.getElementById('pauseScreen').classList.add('hidden');document.getElementById('pauseBtn').classList.remove('hidden');document.getElementById('runTouch').classList.add('hidden');
+        document.getElementById('musicToggle').classList.add('bgm-side');
+    }
+
+
     function plMakeChars(){ const c1=new PlatChar('wei',P1CTRL), c2=new PlatChar('meng',P2CTRL);
         c1.spawn={x:PL.level.p1.x,y:PL.level.p1.y}; c2.spawn={x:PL.level.p2.x,y:PL.level.p2.y}; c1.resetFull(); c2.resetFull(); PL.chars=[c1,c2]; }
-    function plHideScreens(){ ['menuScreen','coopSelect','raceSelect','gameOverScreen','plResult','galleryScreen','endingScreen','fragmentScreen','hud','swipeHint'].forEach(id=>{ const e=document.getElementById(id); if(e)e.classList.add('hidden'); }); }
-    function startCoop(idx){ initAudio(); PL.mode='coop'; PL.weddingMode=false; PL.skin=false; PL.flame=false; PL.trollBlocks=[]; PL.dashCd=0; PL.level=buildCoop(idx); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='coop'; document.getElementById('musicToggle').classList.add('bgm-side'); setBgmSlice(idx); startBGM(); PL.startTime=performance.now();
-        PL.tutT=300; plMsg(`第${idx+1}關　一起抵達終點！`, 200);
-        if(PL.level.hazards && PL.level.hazards.some(h=>h.needShield)) setTimeout(()=>{ if(gameState==='coop') plMsg('⚠️ 前方紅色護盾橋：需崴寶 E 傳遞護盾才不受傷！',420); }, 2200);
-        requestAnimationFrame(plLoop); }
-    function startRace(){ initAudio(); PL.mode='race'; PL.weddingMode=false; PL.skin=plGetRaceWins()>=3; PL.flame=plGetRaceWins()>=1; PL.trollBlocks=[]; PL.level=buildRace(PL.raceDist); plMakeChars(); plHideScreens(); document.getElementById('plTouch').classList.remove('hidden'); gameState='race'; document.getElementById('musicToggle').classList.add('bgm-side'); setBgmSlice(PL.level.theme); startBGM(); PL.startTime=performance.now(); PL.tutT=PL.sudden?0:300; plMsg(PL.sudden?'⚡ 黃金衝刺！終點前的加速帶決勝負！':'預備…開跑！', PL.sudden?300:120); requestAnimationFrame(plLoop); }
+    function plHideScreens(){ ['menuScreen','coopSelect','raceSelect','gameOverScreen','plResult','galleryScreen','endingScreen','fragmentScreen','hud','swipeHint','weddingScreen','keySetup','levelSelect','runTouch'].forEach(id=>{ const e=document.getElementById(id); if(e)e.classList.add('hidden'); }); }
+
+    function startCoop(idx){
+        initAudio();PL.mode='coop';PL.skin=false;PL.weddingMode=false;PL.flame=false;
+        PL.level=buildCoop(idx);plMakeChars();plResetSession();plBuildPlats(PL.level);gameState='coop';
+        setBgmSlice(idx);startBGM();PL.startTime=performance.now();plMsg(COOP_TASKS[idx]+' · 一起抵達終點！',200);startLoop(plLoop,true);
+    }
+    function startRace(){
+        initAudio();PL.mode='race';PL.skin=plGetRaceWins()>=3;PL.weddingMode=false;PL.flame=true;
+        PL.level=buildRace(PL.raceDist);plMakeChars();plResetSession();plBuildPlats(PL.level);gameState='race';
+        PL.countdown=225;setBgmSlice(PL.level.theme);startBGM();PL.startTime=performance.now();startLoop(plLoop,true);
+    }
+
+
     function plExit(){ document.getElementById('plTouch').classList.add('hidden'); showMenu(); }
-    function plShowResult(title,body,btns){ stopBGM(); document.getElementById('plTouch').classList.add('hidden');
+    function plShowResult(title,body,btns){ stopBGM(); clearInputs(); document.getElementById('pauseBtn').classList.add('hidden'); document.getElementById('plTouch').classList.add('hidden');
         document.getElementById('plResultTitle').textContent=title; document.getElementById('plResultBody').innerHTML='<div class="rline">'+body+'</div>';
         const bw=document.getElementById('plResultBtns'); bw.innerHTML=''; btns.forEach(b=>{ const el=document.createElement('button'); el.className='btn btn-small'; el.textContent=b.t; el.onclick=b.f; bw.appendChild(el); });
         document.getElementById('plResult').classList.remove('hidden'); gameState='plresult';
@@ -1721,17 +1866,24 @@
         '到終點先親一下再說。'
     ];
     function coopWord(){ return COOP_WORDS[Math.floor(Math.random()*COOP_WORDS.length)]; }
+    function plCoopSummary(idx){
+        const stars=1+(PL.hearts>=Math.ceil(PL.level.coins.length*.65)?1:0)+(PL.hits<=2?1:0);
+        const key='wm_coopBest_'+idx;let best=null;try{best=JSON.parse(storage.getItem(key)||'null');}catch{}
+        const improved=!best||stars>best.stars||(stars===best.stars&&PL.elapsed<best.frames);
+        if(improved)storage.setItem(key,JSON.stringify({stars,frames:PL.elapsed}));
+        return '<span style="font-size:28px;color:#ffd166">'+'★'.repeat(stars)+'☆'.repeat(3-stars)+'</span><br>第'+(idx+1)+'關 '+CHAPTERS[idx].name+'<br>愛心 '+PL.hearts+'/'+PL.level.coins.length+' · 受擊 '+PL.hits+' · 救援 '+PL.rescues+'<br>時間 '+(PL.elapsed/60).toFixed(1)+' 秒'+(improved?' · 新最佳紀錄！':'')+'<br><span style="font-size:13px;color:#c5b9da">星星目標：完成關卡 / 收集 65% 愛心 / 受擊不超過 2 次</span>';
+    }
     function plWin(){ const idx=PL.level.theme; if(idx+1>plGetCoopMax()) plSetCoopMax(Math.min(10,idx+1)); sfx.chord();
         if(idx===9){ plWedding(); return; }
-        plShowResult('過關！','第'+(idx+1)+'關 '+CHAPTERS[idx].name+' 完成<br>愛心幣分數：'+(PL.chars[0].score+PL.chars[1].score)+'<br><span style="color:#ffb3d1;">💬 崴孟小語：「'+coopWord()+'」</span>',
+        plShowResult('過關！',plCoopSummary(idx)+'<br><span style="color:#ffb3d1;">💬 崴孟小語：「'+coopWord()+'」</span>',
             [ {t:'下一關',f:()=>startCoop(idx+1)}, {t:'重玩',f:()=>startCoop(idx)}, {t:'回主選單',f:plExit} ]); }
     function plFail(){ sfx.hit(); plShowResult('兩人都倒下了…','第'+(PL.level.theme+1)+'關 失敗　再試一次！',[ {t:'重玩本關',f:()=>startCoop(PL.level.theme)}, {t:'回主選單',f:plExit} ]); }
     function plRaceEnd(winner){ sfx.chord(); plSetRaceWins(plGetRaceWins()+1); const nm=winner===0?'崴寶':'孟寶';
         const wasSudden=PL.sudden; PL.sudden=false;
-        const unlocked=plRaceMilestone(); plShowResult(nm+(wasSudden?' 黃金衝刺獲勝！':' 獲勝！'),'賽道 '+PL.raceDist+'m　用時 '+((performance.now()-PL.startTime)/1000).toFixed(1)+' 秒　累積勝場 '+plGetRaceWins()+(unlocked?'<br><span style="color:#ffd24a;">解鎖：'+unlocked+'</span>':''),[ {t:'再來一場',f:startRace}, {t:'回主選單',f:plExit} ]); }
-    function plRaceTie(){ sfx.hit(); plShowResult('平手！','兩人同時抵達終點！<br>⚡ 進入「黃金衝刺」：終點前出現超長加速帶，誰先衝線誰贏！',[ {t:'⚡ 黃金衝刺！',f:()=>{ PL.sudden=true; PL.raceDist=1200; startRace(); }}, {t:'回主選單',f:plExit} ]); }
+        const unlocked=plRaceMilestone(); plShowResult(nm+(wasSudden?' 黃金衝刺獲勝！':' 獲勝！'),'賽道 '+PL.raceDist+'m　用時 '+(PL.elapsed/60).toFixed(1)+' 秒　累積勝場 '+plGetRaceWins()+(unlocked?'<br><span style="color:#ffd24a;">解鎖：'+unlocked+'</span>':''),[ {t:'再來一場',f:startRace}, {t:'回主選單',f:plExit} ]); }
+    function plRaceTie(){ sfx.hit(); plShowResult('平手！','兩人同時抵達終點！<br>⚡ 進入「黃金衝刺」：終點前出現超長加速帶，誰先衝線誰贏！',[ {t:'⚡ 黃金衝刺！',f:()=>{ PL.sudden=true; startRace(); }}, {t:'回主選單',f:plExit} ]); }
     function plRaceMilestone(){ const w=plGetRaceWins(); if(w===1)return '賽車尾焰'; if(w===3)return '婚紗/西裝皮膚'; if(w===5)return '東京夜景背景'; if(w===20)return '隱藏角色：合體版崴孟（單機）'; return ''; }
-    function plUnlockText(){ const rw=plGetRaceWins(), cm=plGetCoopMax(), wed=localStorage.getItem('wm_wedding')==='1', list=[];
+    function plUnlockText(){ const rw=plGetRaceWins(), cm=plGetCoopMax(), wed=storage.getItem('wm_wedding')==='1', list=[];
         if(cm>=1)list.push('合作關卡'); if(wed)list.push('晴空塔婚禮結局'); if(rw>=1)list.push('賽車尾焰'); if(rw>=3)list.push('婚紗/西裝皮膚'); if(rw>=5)list.push('東京夜景背景'); if(rw>=20)list.push('合體版崴孟（單機隱藏角色）');
         return list.length?list.join('、'):'尚無（去闖關／競速吧！）'; }
     // 晴空塔婚禮結局
@@ -1747,7 +1899,7 @@
         drawCharSprite(g,'meng',cx+32,c.height-42-74,42,74,-1,false,false,true);
         const hx=cx-10,hy=c.height-118,s=4,m=[[0,1,0,1,0],[1,1,1,1,1],[1,1,1,1,1],[0,1,1,1,0],[0,0,1,0,0]]; g.fillStyle='#ff5a7a'; for(let r=0;r<5;r++)for(let q=0;q<5;q++) if(m[r][q]) g.fillRect(hx+q*s,hy+r*s,s,s);
     }
-    function plWedding(){ stopBGM(); localStorage.setItem('wm_wedding','1'); setBgmSlice(9); startBGM(); document.getElementById('plTouch').classList.add('hidden'); plHideScreens(); drawWeddingScene();
+    function plWedding(){ document.getElementById('pauseBtn').classList.add('hidden'); stopBGM(); storage.setItem('wm_wedding','1'); setBgmSlice(9); startBGM(); document.getElementById('plTouch').classList.add('hidden'); plHideScreens(); drawWeddingScene();
         document.getElementById('weddingText').innerHTML='崴寶 ♥ 孟寶<br>10 關協力全破！<br>結婚しました・おめでとう<br><span style="color:#ffb3d1;font-size:14px;">💬「'+coopWord()+'」</span>';
         const bw=document.getElementById('weddingBtns'); bw.innerHTML=''; [{t:'回主選單',f:plExit},{t:'重玩最終關',f:()=>startCoop(9)}].forEach(b=>{ const e=document.createElement('button'); e.className='btn btn-small'; e.textContent=b.t; e.onclick=b.f; bw.appendChild(e); });
         document.getElementById('weddingScreen').classList.remove('hidden'); gameState='plresult'; }
@@ -1768,7 +1920,7 @@
             cell.className='lvl-cell'+(locked?' locked':''); cell.innerHTML='<div class="ln">'+(i+1)+(i===9?' ★':'')+'</div><div class="lt">'+(locked?'未解鎖':ch.name)+'</div>';
             if(!locked) cell.onclick=()=>startCoop(i); grid.appendChild(cell); }
         document.getElementById('coopUnlock').innerHTML='已解鎖：'+plUnlockText();
-        const wb=document.getElementById('coopWeddingBtn'); wb.classList.toggle('hidden', localStorage.getItem('wm_wedding')!=='1');
+        const wb=document.getElementById('coopWeddingBtn'); wb.classList.toggle('hidden', storage.getItem('wm_wedding')!=='1');
         refreshCtrlTags();
     }
     function openRaceSelect(){ if(isMobile){ showToast('雙人模式需要鍵盤 ⌨️\n請改用電腦遊玩～'); return; } PL.sudden=false; plHideScreens(); document.getElementById('raceSelect').classList.remove('hidden'); gameState='raceselect'; plSyncRaceOpts();
@@ -1778,7 +1930,7 @@
     // ---------- 操作說明 / 自訂按鍵 ----------
     function ctrlSummary(ctrl){ return `${keyLabel(ctrl.left)}${keyLabel(ctrl.right)} 移動・${keyLabel(ctrl.jump)} 跳・${keyLabel(ctrl.slide)} 滑・${keyLabel(ctrl.skill)} 技能・${keyLabel(ctrl.item)} 道具`; }
     function refreshCtrlTags(){
-        const c=document.getElementById('coopCtrlTag'); if(c) c.innerHTML=`崴寶(P1) <b>${ctrlSummary(P1CTRL)}</b><br>孟寶(P2) <b>${ctrlSummary(P2CTRL)}</b><br>兩人一起抵達終點即過關。可互相救援、合體衝刺(靠近同按技能)。`;
+        const c=document.getElementById('coopCtrlTag'); if(c) c.innerHTML=`崴寶(P1) <b>${ctrlSummary(P1CTRL)}</b><br>孟寶(P2) <b>${ctrlSummary(P2CTRL)}</b><br>一起抵達終點；雙人檢查點回血。靠近按住技能可救援，默契 50% 後同按技能可合體衝刺。Esc / P 暫停。`;
         const r=document.getElementById('raceCtrlTag'); if(r) r.innerHTML=`崴寶(P1) <b>${ctrlSummary(P1CTRL)}</b>　｜　孟寶(P2) <b>${ctrlSummary(P2CTRL)}</b>`;
     }
     let keyCap={active:false, ctrl:null, act:null};
@@ -1802,7 +1954,18 @@
     function openKeySetup(){ plHideScreens(); document.getElementById('keySetup').classList.remove('hidden'); gameState='keysetup'; keyCap={active:false,ctrl:null,act:null}; buildKeyGrid(); }
     function closeKeySetup(){ keyCap={active:false,ctrl:null,act:null}; saveKeys(); refreshCtrlTags(); showMenu(); }
     function resetKeys(){ Object.assign(P1CTRL,P1DEF); Object.assign(P2CTRL,P2DEF); saveKeys(); keyCap={active:false,ctrl:null,act:null}; buildKeyGrid(); }
-    function applyKeyCapture(code){ if(!keyCap.active) return; if(code!=='Escape'){ keyCap.ctrl[keyCap.act]=code; } keyCap.active=false; saveKeys(); buildKeyGrid(); }
+
+    function applyKeyCapture(code){
+        if(!keyCap.active)return;
+        if(code==='Escape'){keyCap.active=false;buildKeyGrid();return;}
+        if(['KeyP','Tab','F5','F11','F12'].includes(code)){document.getElementById('keySetupHint').textContent='此鍵保留給暫停或瀏覽器，請換一個鍵。';return;}
+        const conflict=[P1CTRL,P2CTRL].some(ctrl=>KEY_ACTIONS.some(([act])=>!(ctrl===keyCap.ctrl&&act===keyCap.act)&&ctrl[act]===code));
+        if(conflict){document.getElementById('keySetupHint').textContent='這個鍵已被其他動作使用，請換一個鍵。Esc 可取消。';return;}
+        keyCap.ctrl[keyCap.act]=code;keyCap.active=false;saveKeys();clearInputs();buildKeyGrid();
+        document.getElementById('keySetupHint').textContent='設定已儲存。Esc / P 暫停；請確保兩人使用不同按鍵。';
+    }
+
+
 
     // ---------- 觸控虛擬鍵 ----------
     (function bindTouch(){
@@ -1819,10 +1982,11 @@
 
     // ---------------- 輸入 ----------------
     window.addEventListener('keydown',(e)=>{
-        keyState[e.code]=true;
+        const wasHeld=!!keyState[e.code]; keyState[e.code]=true;
+        if(e.repeat||wasHeld){if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();return;}
         if (keyCap.active){ e.preventDefault(); applyKeyCapture(e.code); return; }
         if (gameState==='keysetup'){ return; }
-        if (gameState==='coop'||gameState==='race'){ initAudio(); if(e.code==='Escape'){ plExit(); return; } plKeyDown(e.code); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); return; }
+        if (gameState==='coop'||gameState==='race'){ initAudio(); if(e.code==='Escape'||e.code==='KeyP'){ e.preventDefault(); pauseGame(); return; } plKeyDown(e.code); if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault(); return; }
         if (gameState==='ending'){ advanceEnding(); return; }
         if (gameState==='qte'){ initAudio();
             if (qteMode==='code'){ const map={ArrowUp:'▲',KeyW:'▲',ArrowDown:'▼',KeyS:'▼',ArrowLeft:'◀',KeyA:'◀',ArrowRight:'▶',KeyD:'▶'};
@@ -1837,7 +2001,10 @@
         if (e.code==='ArrowDown'||e.code==='KeyS') { player.slideHeld=true; player.slide(true); }
     });
     window.addEventListener('keyup',(e)=>{ keyState[e.code]=false;
+        if(['coop','race'].includes(gameState))for(const ch of PL.chars)if(e.code===ch.controls.jump&&ch.vy < -5)ch.vy=-5;
         if (gameState==='playing' && player && (e.code==='ArrowDown'||e.code==='KeyS')) player.slideHeld=false; });
+    window.addEventListener('blur',()=>{ clearInputs(); pauseGame(); });
+    document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInputs();pauseGame();}});
     let touchStartY=0, touchStartX=0, swipeHandled=false, touchInUI=false; const swipeThreshold=34;
     const inUI=(t)=>!!(t&&t.closest&&t.closest('#runTouch,#plTouch,button,.ui-layer,#musicToggle'));
     window.addEventListener('touchstart',(e)=>{ const t=e.changedTouches[0]; touchStartY=t.screenY; touchStartX=t.screenX; swipeHandled=false; touchInUI=inUI(e.target); initAudio(); },{passive:false});
@@ -1881,6 +2048,7 @@
 
     // ---------------- 初始化 ----------------
     document.getElementById('musicToggle').classList.toggle('muted', !bgm.enabled);
+    document.querySelectorAll('.char-card').forEach(card=>{card.tabIndex=0;card.setAttribute('role','button');card.addEventListener('keydown',e=>{if(e.code==='Enter'||e.code==='Space'){e.preventDefault();card.click();}});});
     refreshMenu(); drawPreview('preWei','wei'); drawPreview('preMeng','meng');
     initBackground(); drawBackground();
 </script>
